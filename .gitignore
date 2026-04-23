@@ -15,3 +15,6 @@ __pycache__/
 
 # Emacs auto backup file
 *~
+
+# Claude Code local state (tracked on KemonoNecoTweaks branch, ignored on main)
+/.claude/
