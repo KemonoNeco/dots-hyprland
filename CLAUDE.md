@@ -16,7 +16,7 @@ The repo layout:
 ## Fork conventions (important)
 
 - **Branching:** `main` tracks upstream-compatible state (bug fixes, translations, upstreamable work). *New non-fix features go on the `KemonoNecoTweaks` branch.* Don't add personal features directly to `main`.
-- **`.claude/` handling:** `main` ignores `.claude/` via `.gitignore`; the `KemonoNecoTweaks` branch tracks it (that branch's `.gitignore` omits the `.claude/` line). Don't "fix" the diverging `.gitignore` by making them match — the divergence is intentional.
+- **`.claude/` and `CLAUDE.md` handling:** `main` ignores both via `.gitignore` and does not track them; `KemonoNecoTweaks` tracks both. If you're reading this file, you're on `KemonoNecoTweaks` (or on a detached checkout with a stale working copy) — `CLAUDE.md` does not exist in `main`'s tree. Don't "fix" the diverging `.gitignore` by making them match, and don't port this file to `main` — the divergence is intentional so upstream-facing branches stay clean.
 - **Upstream PRs:** Follow upstream's rule of one feature per PR. Don't bundle personal/default changes into fix PRs. See `.github/CONTRIBUTING.md`.
 
 ## The Quickshell configuration (the bulk of the code)

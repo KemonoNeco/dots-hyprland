@@ -16,7 +16,7 @@ __pycache__/
 # Emacs auto backup file
 *~
 
-# NOTE: `/.claude/` is ignored on `main` but tracked on this branch.
-# Do not re-add the `/.claude/` ignore here, or personal Claude Code state
-# will stop being versioned. If you see `.claude/` appear in `git status`,
-# that's intentional on KemonoNecoTweaks.
+# NOTE: `/.claude/` and `/CLAUDE.md` are ignored on `main` but tracked on
+# this branch. Do not re-add those ignores here, or personal Claude Code
+# state and guidance will stop being versioned. If `.claude/` or
+# `CLAUDE.md` show up in `git status` on this branch, that's intentional.
