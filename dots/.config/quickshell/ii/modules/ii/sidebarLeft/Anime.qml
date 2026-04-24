@@ -70,20 +70,6 @@ Item {
             }
         },
         {
-            name: "safe",
-            description: Translation.tr("Disable NSFW content"),
-            execute: () => {
-                Persistent.states.booru.allowNsfw = false;
-            }
-        },
-        {
-            name: "lewd",
-            description: Translation.tr("Allow NSFW content"),
-            execute: () => {
-                Persistent.states.booru.allowNsfw = true;
-            }
-        },
-        {
             name: "favs",
             description: Translation.tr("Search your e621 favorites"),
             execute: (args) => {
