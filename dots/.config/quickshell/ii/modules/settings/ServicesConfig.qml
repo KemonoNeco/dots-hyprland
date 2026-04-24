@@ -275,4 +275,40 @@ ContentPage {
             }
         }
     }
+
+    ContentSection {
+        icon: "imagesearch_roller"
+        title: Translation.tr("Booru: e621")
+
+        MaterialTextArea {
+            Layout.fillWidth: true
+            placeholderText: Translation.tr("e621 username")
+            text: Config.options?.sidebar?.booru?.e621?.username ?? ""
+            wrapMode: TextEdit.Wrap
+            onTextChanged: {
+                Config.options.sidebar.booru.e621.username = text;
+            }
+        }
+
+        MaterialTextArea {
+            Layout.fillWidth: true
+            placeholderText: Translation.tr("API key (stored in keyring)")
+            text: KeyringStorage.keyringData?.apiKeys?.e621 ?? ""
+            wrapMode: TextEdit.NoWrap
+            echoMode: TextInput.Password
+            onTextChanged: {
+                if (text !== (KeyringStorage.keyringData?.apiKeys?.e621 ?? "")) {
+                    KeyringStorage.setNestedField(["apiKeys", "e621"], text);
+                }
+            }
+        }
+
+        ConfigSwitch {
+            text: Translation.tr("Apply blacklist from account")
+            checked: Config.options?.sidebar?.booru?.e621?.applyBlacklist ?? true
+            onCheckedChanged: {
+                Config.options.sidebar.booru.e621.applyBlacklist = checked;
+            }
+        }
+    }
 }

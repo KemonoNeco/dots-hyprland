@@ -502,10 +502,14 @@ Singleton {
                 }
                 property JsonObject booru: JsonObject {
                     property bool allowNsfw: false
-                    property string defaultProvider: "yandere"
+                    property string defaultProvider: "e621"
                     property int limit: 20
                     property JsonObject zerochan: JsonObject {
                         property string username: "[unset]"
+                    }
+                    property JsonObject e621: JsonObject {
+                        property string username: "[unset]"
+                        property bool applyBlacklist: true
                     }
                 }
                 property JsonObject cornerOpen: JsonObject {

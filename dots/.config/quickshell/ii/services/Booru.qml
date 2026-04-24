@@ -187,6 +187,54 @@ Singleton {
                 })
             }
         },
+        "e621": {
+            "name": "e621",
+            "url": "https://e621.net",
+            "api": "https://e621.net/posts.json",
+            "description": Translation.tr("Furry | Adult by default"),
+            "mapFunc": (response) => {
+                return response.posts.map(item => {
+                    const allTags = [].concat(
+                        item.tags.general ?? [],
+                        item.tags.species ?? [],
+                        item.tags.character ?? [],
+                        item.tags.copyright ?? [],
+                        item.tags.artist ?? [],
+                        item.tags.meta ?? []
+                    ).join(" ")
+                    const file = item.file ?? {}
+                    const preview = item.preview ?? {}
+                    const sample = item.sample ?? {}
+                    return {
+                        "id": item.id,
+                        "width": file.width ?? 0,
+                        "height": file.height ?? 0,
+                        "aspect_ratio": (file.width && file.height) ? (file.width / file.height) : 1,
+                        "tags": allTags,
+                        "rating": item.rating,
+                        "is_nsfw": (item.rating !== 's'),
+                        "md5": file.md5 ?? "",
+                        "preview_url": preview.url ?? file.url,
+                        "sample_url": (sample.has ? sample.url : null) ?? file.url,
+                        "file_url": file.url,
+                        "file_ext": file.ext,
+                        "source": getWorkingImageSource(item.sources?.[0] ?? "") || file.url,
+                        "score": item.score?.total ?? 0,
+                        "fav_count": item.fav_count ?? 0,
+                        "is_favorited": item.is_favorited ?? false,
+                    }
+                })
+            },
+            "tagSearchTemplate": "https://e621.net/tags.json?search[name_matches]={{query}}*&search[order]=count&limit=10",
+            "tagMapFunc": (response) => {
+                return response.map(item => {
+                    return {
+                        "name": item.name,
+                        "count": item.post_count
+                    }
+                })
+            }
+        },
         "waifu.im": {
             "name": "waifu.im",
             "url": "https://waifu.im",
@@ -275,6 +323,121 @@ Singleton {
     }
     property var currentProvider: Persistent.states.booru.provider
 
+    property var e621Blacklist: []
+    property string e621BlacklistUser: ""
+    onCurrentProviderChanged: {
+        if (currentProvider === "e621") root.refreshE621Blacklist()
+    }
+    Component.onCompleted: {
+        if (currentProvider === "e621") root.refreshE621Blacklist()
+    }
+
+    function e621Authed() {
+        const username = Config.options?.sidebar?.booru?.e621?.username
+        const apiKey = KeyringStorage.keyringData?.apiKeys?.e621
+        return username && username !== "[unset]" && apiKey && apiKey.length > 0
+    }
+
+    function setE621AuthHeaders(xhr) {
+        // e621 rejects generic browser UAs. A project-identifying UA is required.
+        // Docs: https://e621.net/help/api#user-agents
+        const username = Config.options?.sidebar?.booru?.e621?.username
+        const contactTag = (username && username !== "[unset]") ? username : "anonymous"
+        xhr.setRequestHeader("User-Agent",
+            `illogical-impulse-sidebar/1.0 (by ${contactTag} on e621)`)
+        const apiKey = KeyringStorage.keyringData?.apiKeys?.e621
+        if (username && username !== "[unset]" && apiKey) {
+            xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(username + ":" + apiKey))
+        }
+    }
+
+    function parseE621BlacklistLine(line) {
+        // Each line is a space-separated AND clause; leading "-" negates a tag.
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith("#")) return null
+        const parts = trimmed.split(/\s+/).filter(p => p.length > 0)
+        if (parts.length === 0) return null
+        return parts.map(tok => {
+            if (tok.startsWith("-")) return { tag: tok.substring(1), negated: true }
+            return { tag: tok, negated: false }
+        })
+    }
+
+    function refreshE621Blacklist() {
+        if (!root.e621Authed()) {
+            root.e621Blacklist = []
+            root.e621BlacklistUser = ""
+            return
+        }
+        const username = Config.options.sidebar.booru.e621.username
+        if (root.e621BlacklistUser === username && root.e621Blacklist.length > 0) return
+        const xhr = new XMLHttpRequest()
+        xhr.open("GET", "https://e621.net/users/" + encodeURIComponent(username) + ".json")
+        root.setE621AuthHeaders(xhr)
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return
+            if (xhr.status !== 200) {
+                console.log("[Booru/e621] Blacklist fetch failed:", xhr.status)
+                return
+            }
+            try {
+                const user = JSON.parse(xhr.responseText)
+                const raw = user.blacklisted_tags ?? ""
+                const parsed = raw.split("\n").map(root.parseE621BlacklistLine).filter(x => x)
+                root.e621Blacklist = parsed
+                root.e621BlacklistUser = username
+            } catch (e) {
+                console.log("[Booru/e621] Blacklist parse failed:", e)
+            }
+        }
+        xhr.send()
+    }
+
+    function matchesE621Blacklist(tagString) {
+        if (!root.e621Blacklist || root.e621Blacklist.length === 0) return false
+        const tagSet = {}
+        tagString.split(" ").forEach(t => { if (t) tagSet[t] = true })
+        return root.e621Blacklist.some(expr => {
+            return expr.every(entry => entry.negated ? !tagSet[entry.tag] : !!tagSet[entry.tag])
+        })
+    }
+
+    function sendE621Auth(method, path, body, onOk) {
+        if (!root.e621Authed()) {
+            root.addSystemMessage(Translation.tr("e621: set username + API key in Settings → Services first"))
+            return
+        }
+        const xhr = new XMLHttpRequest()
+        xhr.open(method, "https://e621.net" + path)
+        root.setE621AuthHeaders(xhr)
+        if (body) xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded")
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return
+            if (xhr.status >= 200 && xhr.status < 300) {
+                if (onOk) onOk(xhr)
+            } else {
+                root.addSystemMessage(Translation.tr("e621: request failed (%1)").arg(xhr.status))
+            }
+        }
+        xhr.send(body ?? null)
+    }
+
+    function e621Favorite(postId) {
+        root.sendE621Auth("POST", "/favorites.json", "post_id=" + postId,
+            () => root.addSystemMessage(Translation.tr("Added to favorites")))
+    }
+
+    function e621Unfavorite(postId) {
+        root.sendE621Auth("DELETE", "/favorites/" + postId + ".json", null,
+            () => root.addSystemMessage(Translation.tr("Removed from favorites")))
+    }
+
+    function e621Vote(postId, score) {
+        root.sendE621Auth("POST", "/posts/" + postId + "/votes.json",
+            "score=" + score + "&no_unvote=true",
+            () => root.addSystemMessage(score > 0 ? Translation.tr("Upvoted") : Translation.tr("Downvoted")))
+    }
+
     function getWorkingImageSource(url) {
         if (url.includes('pximg.net')) {
             return `https://www.pixiv.net/en/artworks/${url.substring(url.lastIndexOf('/') + 1).replace(/_p\d+\.(png|jpg|jpeg|gif)$/, '')}`;
@@ -312,7 +475,7 @@ Singleton {
         var baseUrl = provider.api
         var url = baseUrl
         var tagString = tags.join(" ")
-        if (!nsfw && !(["zerochan", "waifu.im", "t.alcy.cc"].includes(currentProvider))) {
+        if (!nsfw && !(["zerochan", "waifu.im", "t.alcy.cc", "e621"].includes(currentProvider))) {
             if (currentProvider == "gelbooru") 
                 tagString += " rating:general";
             else 
@@ -385,6 +548,14 @@ Singleton {
                         response = provider.mapFunc(response)
                     }
                     // console.log("[Booru] Mapped response: " + JSON.stringify(response))
+                    if (currentProvider === "e621"
+                            && Config.options?.sidebar?.booru?.e621?.applyBlacklist
+                            && root.e621Blacklist.length > 0) {
+                        response = response.map(img => {
+                            img.is_blacklisted = root.matchesE621Blacklist(img.tags)
+                            return img
+                        })
+                    }
                     newResponse.images = response
                     newResponse.message = response.length > 0 ? "" : root.failMessage
                     
@@ -414,11 +585,14 @@ Singleton {
                 const userAgent = Config.options?.sidebar?.booru?.zerochan?.username ? `Desktop sidebar booru viewer - username: ${Config.options.sidebar.booru.zerochan.username}` : defaultUserAgent
                 xhr.setRequestHeader("User-Agent", userAgent)
             }
+            else if (currentProvider == "e621") {
+                root.setE621AuthHeaders(xhr)
+            }
             root.runningRequests++;
             xhr.send()
         } catch (error) {
             console.log("Could not set User-Agent:", error)
-        } 
+        }
     }
 
     property var currentTagRequest: null
@@ -462,10 +636,13 @@ Singleton {
             if (currentProvider == "danbooru") {
                 xhr.setRequestHeader("User-Agent", defaultUserAgent)
             }
+            else if (currentProvider == "e621") {
+                root.setE621AuthHeaders(xhr)
+            }
             xhr.send()
         } catch (error) {
             console.log("Could not set User-Agent:", error)
-        } 
+        }
     }
 }
 

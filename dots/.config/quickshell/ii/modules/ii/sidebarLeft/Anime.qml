@@ -83,6 +83,61 @@ Item {
                 Persistent.states.booru.allowNsfw = true;
             }
         },
+        {
+            name: "favs",
+            description: Translation.tr("Search your e621 favorites"),
+            execute: (args) => {
+                if (Booru.currentProvider !== "e621") {
+                    Booru.addSystemMessage(Translation.tr("Use /mode e621 first"));
+                    return;
+                }
+                const username = Config.options?.sidebar?.booru?.e621?.username;
+                if (!username || username === "[unset]") {
+                    Booru.addSystemMessage(Translation.tr("Set your e621 username with /user NAME or in Settings → Services"));
+                    return;
+                }
+                const extra = (args ?? []).join(" ").trim();
+                const query = extra.length > 0 ? `fav:${username} ${extra}` : `fav:${username}`;
+                root.handleInput(query);
+            }
+        },
+        {
+            name: "user",
+            description: Translation.tr("Set e621 username: /user NAME"),
+            execute: (args) => {
+                const name = (args?.[0] ?? "").trim();
+                if (!name) {
+                    Booru.addSystemMessage(Translation.tr("Usage: /user YOUR_E621_USERNAME"));
+                    return;
+                }
+                Config.options.sidebar.booru.e621.username = name;
+                Booru.addSystemMessage(Translation.tr("e621 username set to ") + name);
+                if (Booru.currentProvider === "e621") Booru.refreshE621Blacklist();
+            }
+        },
+        {
+            name: "key",
+            description: Translation.tr("Set e621 API key: /key API_KEY"),
+            execute: (args) => {
+                const key = (args?.[0] ?? "").trim();
+                if (!key) {
+                    Booru.addSystemMessage(Translation.tr("Usage: /key YOUR_E621_API_KEY (get one at e621.net/users/home → Manage API Access)"));
+                    return;
+                }
+                KeyringStorage.setNestedField(["apiKeys", "e621"], key);
+                Booru.addSystemMessage(Translation.tr("e621 API key saved to keyring"));
+                if (Booru.currentProvider === "e621") Booru.refreshE621Blacklist();
+            }
+        },
+        {
+            name: "logout",
+            description: Translation.tr("Clear e621 credentials"),
+            execute: () => {
+                Config.options.sidebar.booru.e621.username = "[unset]";
+                KeyringStorage.setNestedField(["apiKeys", "e621"], "");
+                Booru.addSystemMessage(Translation.tr("e621 credentials cleared"));
+            }
+        },
     ]
 
     function handleInput(inputText) {
@@ -539,6 +594,41 @@ Item {
                         }
                     }
 
+                }
+
+                MouseArea { // e621 blacklist toggle
+                    visible: Booru.currentProvider === "e621"
+                    implicitWidth: visible ? blacklistSwitchesRow.implicitWidth : 0
+                    Layout.fillHeight: true
+                    hoverEnabled: true
+                    PointingHandInteraction {}
+                    onPressed: {
+                        blacklistSwitch.checked = !blacklistSwitch.checked
+                    }
+
+                    RowLayout {
+                        id: blacklistSwitchesRow
+                        spacing: 5
+                        anchors.centerIn: parent
+
+                        StyledText {
+                            Layout.fillHeight: true
+                            Layout.leftMargin: 10
+                            Layout.alignment: Qt.AlignVCenter
+                            font.pixelSize: Appearance.font.pixelSize.smaller
+                            color: Appearance.colors.colOnLayer1
+                            text: Translation.tr("Blacklist")
+                        }
+                        StyledSwitch {
+                            id: blacklistSwitch
+                            scale: 0.6
+                            Layout.alignment: Qt.AlignVCenter
+                            checked: Config.options?.sidebar?.booru?.e621?.applyBlacklist ?? true
+                            onCheckedChanged: {
+                                Config.options.sidebar.booru.e621.applyBlacklist = checked;
+                            }
+                        }
+                    }
                 }
 
                 Item { Layout.fillWidth: true }

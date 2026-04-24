@@ -76,7 +76,7 @@ Singleton {
 
             property JsonObject booru: JsonObject {
                 property bool allowNsfw: false
-                property string provider: "yandere"
+                property string provider: "e621"
             }
 
             property JsonObject idle: JsonObject {
