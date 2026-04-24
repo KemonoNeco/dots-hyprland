@@ -482,10 +482,12 @@ Singleton {
         var baseUrl = provider.api
         var url = baseUrl
         var tagString = tags.join(" ")
-        if (!nsfw && !(["zerochan", "waifu.im", "t.alcy.cc", "e621"].includes(currentProvider))) {
-            if (currentProvider == "gelbooru") 
+        if (!nsfw && !(["zerochan", "waifu.im", "t.alcy.cc"].includes(currentProvider))) {
+            if (currentProvider == "gelbooru")
                 tagString += " rating:general";
-            else 
+            else if (currentProvider == "e621")
+                tagString += " rating:s"; // e621 uses short rating codes (s/q/e)
+            else
                 tagString += " rating:safe";
         }
         var params = []

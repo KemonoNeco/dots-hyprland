@@ -196,11 +196,11 @@ Button {
             }
         }
 
-        // Animated overlay: GIF plays on hover; video plays inline once the user clicks ▶ and the file is cached.
+        // GIFs autoplay; videos play once cached + requested.
         Loader {
             id: mediaLoader
             anchors.fill: parent
-            active: (root.isGif && root.hovered) || (root.isVideo && root.videoCached && root.videoPlayRequested)
+            active: root.isGif || (root.isVideo && root.videoCached && root.videoPlayRequested)
             sourceComponent: root.isVideo ? videoComponent : gifComponent
         }
 
@@ -478,23 +478,6 @@ Button {
                 if (!root.playableUrl) return
                 root.videoPlayRequested = true
                 root.startVideoDownload()
-            }
-        }
-        Rectangle {
-            visible: root.isGif
-            anchors.left: parent.left
-            anchors.bottom: parent.bottom
-            anchors.margins: 6
-            radius: 4
-            color: Qt.rgba(0, 0, 0, 0.55)
-            implicitWidth: gifLabel.implicitWidth + 10
-            implicitHeight: gifLabel.implicitHeight + 4
-            StyledText {
-                id: gifLabel
-                anchors.centerIn: parent
-                text: "GIF"
-                font.pixelSize: Appearance.font.pixelSize.smaller
-                color: "white"
             }
         }
 
