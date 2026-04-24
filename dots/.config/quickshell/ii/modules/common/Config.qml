@@ -510,6 +510,9 @@ Singleton {
                     property JsonObject e621: JsonObject {
                         property string username: "[unset]"
                         property bool applyBlacklist: true
+                        // Local blacklist — one rule per line; space-separated tags are AND-combined;
+                        // prefix with "-" to negate. Combined with the account blacklist (if logged in).
+                        property string blacklist: "young\nyoung_anthro\nyoung_human"
                     }
                 }
                 property JsonObject cornerOpen: JsonObject {

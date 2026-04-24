@@ -138,6 +138,20 @@ Item {
                 Booru.addSystemMessage(Translation.tr("e621 credentials cleared"));
             }
         },
+        {
+            name: "blacklist",
+            description: Translation.tr("Set local e621 blacklist: /blacklist tag1 tag2 ..."),
+            execute: (args) => {
+                const rules = (args ?? []).join(" ").trim();
+                Config.options.sidebar.booru.e621.blacklist = rules;
+                if (rules.length === 0) {
+                    Booru.addSystemMessage(Translation.tr("Local blacklist cleared"));
+                } else {
+                    const count = rules.split("\n").filter(l => l.trim().length > 0).length;
+                    Booru.addSystemMessage(Translation.tr("Local blacklist: %1 rule(s)").arg(count));
+                }
+            }
+        },
     ]
 
     function handleInput(inputText) {

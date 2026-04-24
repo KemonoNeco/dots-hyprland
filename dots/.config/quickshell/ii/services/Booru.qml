@@ -393,11 +393,18 @@ Singleton {
         xhr.send()
     }
 
+    function combinedE621Blacklist() {
+        const localRaw = Config.options?.sidebar?.booru?.e621?.blacklist ?? ""
+        const local = localRaw.split("\n").map(root.parseE621BlacklistLine).filter(x => x)
+        return local.concat(root.e621Blacklist || [])
+    }
+
     function matchesE621Blacklist(tagString) {
-        if (!root.e621Blacklist || root.e621Blacklist.length === 0) return false
+        const all = root.combinedE621Blacklist()
+        if (all.length === 0) return false
         const tagSet = {}
         tagString.split(" ").forEach(t => { if (t) tagSet[t] = true })
-        return root.e621Blacklist.some(expr => {
+        return all.some(expr => {
             return expr.every(entry => entry.negated ? !tagSet[entry.tag] : !!tagSet[entry.tag])
         })
     }
@@ -548,13 +555,19 @@ Singleton {
                         response = provider.mapFunc(response)
                     }
                     // console.log("[Booru] Mapped response: " + JSON.stringify(response))
-                    if (currentProvider === "e621"
-                            && Config.options?.sidebar?.booru?.e621?.applyBlacklist
-                            && root.e621Blacklist.length > 0) {
-                        response = response.map(img => {
-                            img.is_blacklisted = root.matchesE621Blacklist(img.tags)
-                            return img
-                        })
+                    if (currentProvider === "e621") {
+                        const bl = root.combinedE621Blacklist()
+                        const apply = Config.options?.sidebar?.booru?.e621?.applyBlacklist
+                        console.log(`[Booru] e621 blacklist: apply=${apply}, rules=${bl.length}`)
+                        if (apply && bl.length > 0) {
+                            let hits = 0
+                            response = response.map(img => {
+                                img.is_blacklisted = root.matchesE621Blacklist(img.tags)
+                                if (img.is_blacklisted) hits++
+                                return img
+                            })
+                            console.log(`[Booru] blacklist hid ${hits} of ${response.length} results`)
+                        }
                     }
                     newResponse.images = response
                     newResponse.message = response.length > 0 ? "" : root.failMessage

@@ -16,13 +16,15 @@ import Quickshell.Widgets
 
 Button {
     id: root
-    // Click anywhere on the thumbnail to start video playback. For already-playing videos,
-    // the center play/pause button handles toggling instead.
+    // Click anywhere on the thumbnail to start video playback; click again to toggle play/pause.
     onClicked: {
-        if (isVideo && !(videoCached && videoPlayRequested)) {
+        if (!isVideo) return
+        if (!(videoCached && videoPlayRequested)) {
             videoPlayRequested = true
             startVideoDownload()
+            return
         }
+        if (mediaLoader.item && mediaLoader.item.togglePlay) mediaLoader.item.togglePlay()
     }
     property var imageData
     property var rowHeight
@@ -137,8 +139,10 @@ Button {
     }
 
     padding: 0
-    implicitWidth: root.rowHeight * modelData.aspect_ratio
-    implicitHeight: root.rowHeight
+    // Blacklisted posts are hidden entirely (zero width so the flow layout skips them).
+    visible: !isBlacklisted
+    implicitWidth: isBlacklisted ? 0 : (root.rowHeight * modelData.aspect_ratio)
+    implicitHeight: isBlacklisted ? 0 : root.rowHeight
 
     background: Rectangle {
         implicitWidth: root.rowHeight * modelData.aspect_ratio
@@ -229,6 +233,11 @@ Button {
                 property bool isPlaying: mediaPlayer.playbackState === MediaPlayer.PlayingState
                 property bool userSeeking: false
                 property real seekValue: 0
+
+                function togglePlay() {
+                    if (mediaPlayer.playbackState === MediaPlayer.PlayingState) mediaPlayer.pause()
+                    else mediaPlayer.play()
+                }
 
                 // Actual VideoOutput — kept off-screen / visible: false so Qt's hardware
                 // video path renders into it, then ShaderEffectSource mirrors it into a
@@ -544,122 +553,128 @@ Button {
             }
         }
 
-        Loader {
-            id: contextMenuLoader
-            active: root.showActions
-            anchors.top: menuButton.bottom
-            anchors.right: parent.right
-            anchors.margins: 8
+    }
 
-            sourceComponent: Item {
-                width: contextMenu.width
-                height: contextMenu.height
+    // Context menu is a sibling of contentItem (outside its ClippingRectangle) so it can
+    // overflow the card's rounded corners and show all menu items.
+    Loader {
+        id: contextMenuLoader
+        active: root.showActions
+        // Position just below menuButton: 8px (menuButton top margin) + 30 (button size) + 8 (gap).
+        anchors.top: parent.top
+        anchors.topMargin: 46
+        anchors.right: parent.right
+        anchors.rightMargin: 8
+        z: 1000
 
-                StyledRectangularShadow {
-                    target: contextMenu
+        sourceComponent: Item {
+            width: contextMenu.width
+            height: contextMenu.height
+
+            StyledRectangularShadow {
+                target: contextMenu
+            }
+            Rectangle {
+                id: contextMenu
+                anchors.centerIn: parent
+                opacity: root.showActions ? 1 : 0
+                visible: opacity > 0
+                radius: Appearance.rounding.small
+                color: Appearance.m3colors.m3surfaceContainer
+                implicitHeight: contextMenuColumnLayout.implicitHeight + radius * 2
+                implicitWidth: contextMenuColumnLayout.implicitWidth
+
+                Behavior on opacity {
+                    NumberAnimation {
+                        duration: Appearance.animation.elementMoveFast.duration
+                        easing.type: Appearance.animation.elementMoveFast.type
+                        easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                    }
                 }
-                Rectangle {
-                    id: contextMenu
-                    anchors.centerIn: parent
-                    opacity: root.showActions ? 1 : 0
-                    visible: opacity > 0
-                    radius: Appearance.rounding.small
-                    color: Appearance.m3colors.m3surfaceContainer
-                    implicitHeight: contextMenuColumnLayout.implicitHeight + radius * 2
-                    implicitWidth: contextMenuColumnLayout.implicitWidth
 
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: Appearance.animation.elementMoveFast.duration
-                            easing.type: Appearance.animation.elementMoveFast.type
-                            easing.bezierCurve: Appearance.animation.elementMoveFast.bezierCurve
+                ColumnLayout {
+                    id: contextMenuColumnLayout
+                    anchors.centerIn: parent
+                    spacing: 0
+
+                    MenuButton {
+                        id: openFileLinkButton
+                        Layout.fillWidth: true
+                        buttonText: Translation.tr("Open file link")
+                        onClicked: {
+                            root.showActions = false
+                            Hyprland.dispatch("keyword cursor:no_warps true")
+                            Qt.openUrlExternally(root.imageData.file_url)
+                            Hyprland.dispatch("keyword cursor:no_warps false")
                         }
                     }
-
-                    ColumnLayout {
-                        id: contextMenuColumnLayout
-                        anchors.centerIn: parent
-                        spacing: 0
-
-                        MenuButton {
-                            id: openFileLinkButton
-                            Layout.fillWidth: true
-                            buttonText: Translation.tr("Open file link")
-                            onClicked: {
-                                root.showActions = false
-                                Hyprland.dispatch("keyword cursor:no_warps true")
-                                Qt.openUrlExternally(root.imageData.file_url)
-                                Hyprland.dispatch("keyword cursor:no_warps false")
-                            }
+                    MenuButton {
+                        id: sourceButton
+                        visible: root.imageData.source && root.imageData.source.length > 0
+                        Layout.fillWidth: true
+                        buttonText: Translation.tr("Go to source (%1)").arg(StringUtils.getDomain(root.imageData.source))
+                        enabled: root.imageData.source && root.imageData.source.length > 0
+                        onClicked: {
+                            root.showActions = false
+                            Hyprland.dispatch("keyword cursor:no_warps true")
+                            Qt.openUrlExternally(root.imageData.source)
+                            Hyprland.dispatch("keyword cursor:no_warps false")
                         }
-                        MenuButton {
-                            id: sourceButton
-                            visible: root.imageData.source && root.imageData.source.length > 0
-                            Layout.fillWidth: true
-                            buttonText: Translation.tr("Go to source (%1)").arg(StringUtils.getDomain(root.imageData.source))
-                            enabled: root.imageData.source && root.imageData.source.length > 0
-                            onClicked: {
-                                root.showActions = false
-                                Hyprland.dispatch("keyword cursor:no_warps true")
-                                Qt.openUrlExternally(root.imageData.source)
-                                Hyprland.dispatch("keyword cursor:no_warps false")
-                            }
+                    }
+                    MenuButton {
+                        id: openInMpvButton
+                        visible: root.isVideo || root.isGif
+                        Layout.fillWidth: true
+                        buttonText: Translation.tr("Open in mpv")
+                        onClicked: {
+                            root.showActions = false
+                            if (!root.playableUrl) return
+                            Quickshell.execDetached(["mpv", "--loop", "--force-window", root.playableUrl])
                         }
-                        MenuButton {
-                            id: openInMpvButton
-                            visible: root.isVideo || root.isGif
-                            Layout.fillWidth: true
-                            buttonText: Translation.tr("Open in mpv")
-                            onClicked: {
-                                root.showActions = false
-                                if (!root.playableUrl) return
-                                Quickshell.execDetached(["mpv", "--loop", "--force-window", root.playableUrl])
-                            }
+                    }
+                    MenuButton {
+                        id: downloadButton
+                        Layout.fillWidth: true
+                        buttonText: Translation.tr("Download")
+                        onClicked: {
+                            root.showActions = false;
+                            const targetPath = root.imageData.is_nsfw ? root.nsfwPath : root.downloadPath;
+                            Quickshell.execDetached(["bash", "-c",
+                                `mkdir -p '${targetPath}' && curl '${root.imageData.file_url}' -o '${targetPath}/${root.fileName}' && notify-send '${Translation.tr("Download complete")}' '${root.downloadPath}/${root.fileName}' -a 'Shell'`
+                            ])
                         }
-                        MenuButton {
-                            id: downloadButton
-                            Layout.fillWidth: true
-                            buttonText: Translation.tr("Download")
-                            onClicked: {
-                                root.showActions = false;
-                                const targetPath = root.imageData.is_nsfw ? root.nsfwPath : root.downloadPath;
-                                Quickshell.execDetached(["bash", "-c",
-                                    `mkdir -p '${targetPath}' && curl '${root.imageData.file_url}' -o '${targetPath}/${root.fileName}' && notify-send '${Translation.tr("Download complete")}' '${root.downloadPath}/${root.fileName}' -a 'Shell'`
-                                ])
-                            }
+                    }
+                    MenuButton {
+                        id: favButton
+                        visible: root.isE621Provider
+                        Layout.fillWidth: true
+                        buttonText: root.imageData.is_favorited ? Translation.tr("Remove from favorites")
+                                                                 : Translation.tr("Add to favorites")
+                        onClicked: {
+                            root.showActions = false
+                            if (root.imageData.is_favorited) Booru.e621Unfavorite(root.imageData.id)
+                            else Booru.e621Favorite(root.imageData.id)
+                            root.imageData.is_favorited = !root.imageData.is_favorited
                         }
-                        MenuButton {
-                            id: favButton
-                            visible: root.isE621Provider
-                            Layout.fillWidth: true
-                            buttonText: root.imageData.is_favorited ? Translation.tr("Remove from favorites")
-                                                                     : Translation.tr("Add to favorites")
-                            onClicked: {
-                                root.showActions = false
-                                if (root.imageData.is_favorited) Booru.e621Unfavorite(root.imageData.id)
-                                else Booru.e621Favorite(root.imageData.id)
-                                root.imageData.is_favorited = !root.imageData.is_favorited
-                            }
+                    }
+                    MenuButton {
+                        id: upvoteButton
+                        visible: root.isE621Provider
+                        Layout.fillWidth: true
+                        buttonText: Translation.tr("Upvote")
+                        onClicked: {
+                            root.showActions = false
+                            Booru.e621Vote(root.imageData.id, 1)
                         }
-                        MenuButton {
-                            id: upvoteButton
-                            visible: root.isE621Provider
-                            Layout.fillWidth: true
-                            buttonText: Translation.tr("Upvote")
-                            onClicked: {
-                                root.showActions = false
-                                Booru.e621Vote(root.imageData.id, 1)
-                            }
-                        }
-                        MenuButton {
-                            id: downvoteButton
-                            visible: root.isE621Provider
-                            Layout.fillWidth: true
-                            buttonText: Translation.tr("Downvote")
-                            onClicked: {
-                                root.showActions = false
-                                Booru.e621Vote(root.imageData.id, -1)
-                            }
+                    }
+                    MenuButton {
+                        id: downvoteButton
+                        visible: root.isE621Provider
+                        Layout.fillWidth: true
+                        buttonText: Translation.tr("Downvote")
+                        onClicked: {
+                            root.showActions = false
+                            Booru.e621Vote(root.imageData.id, -1)
                         }
                     }
                 }
