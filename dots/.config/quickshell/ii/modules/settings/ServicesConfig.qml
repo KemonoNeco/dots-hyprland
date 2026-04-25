@@ -290,11 +290,10 @@ ContentPage {
             }
         }
 
-        MaterialTextArea {
+        MaterialTextField {
             Layout.fillWidth: true
             placeholderText: Translation.tr("API key (stored in keyring)")
             text: KeyringStorage.keyringData?.apiKeys?.e621 ?? ""
-            wrapMode: TextEdit.NoWrap
             echoMode: TextInput.Password
             onTextChanged: {
                 if (text !== (KeyringStorage.keyringData?.apiKeys?.e621 ?? "")) {
