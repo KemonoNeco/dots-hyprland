@@ -15,7 +15,8 @@ The repo layout:
 
 ## Fork conventions (important)
 
-- **Branching:** `main` tracks upstream-compatible state (bug fixes, translations, upstreamable work). *New non-fix features go on the `KemonoNecoTweaks` branch.* Don't add personal features directly to `main`.
+- **Remotes:** `upstream` = `end-4/dots-hyprland`, `origin` = `KemonoNeco/dots-hyprland`.
+- **Branching:** `main` is a pristine mirror of `upstream/main` — fast-forward only, never commit to it. *All personal work lives on `KemonoNecoTweaks`*, which stays current by **merging** `main` into it (never rebasing — merges keep past conflict resolutions so each update only conflicts on genuinely new overlaps). Upstreamable fixes go on a `fix/*` branch off `main` and get PR'd from there, so `main` stays fast-forwardable. `git diff main KemonoNecoTweaks` is therefore always exactly "what this fork changes".
 - **`.claude/` and `CLAUDE.md` handling:** `main` ignores both via `.gitignore` and does not track them; `KemonoNecoTweaks` tracks both. If you're reading this file, you're on `KemonoNecoTweaks` (or on a detached checkout with a stale working copy) — `CLAUDE.md` does not exist in `main`'s tree. Don't "fix" the diverging `.gitignore` by making them match, and don't port this file to `main` — the divergence is intentional so upstream-facing branches stay clean.
 - **Upstream PRs:** Follow upstream's rule of one feature per PR. Don't bundle personal/default changes into fix PRs. See `.github/CONTRIBUTING.md`.
 
@@ -54,6 +55,34 @@ Conventions from `.github/CONTRIBUTING.md` (follow these):
 - `hyprlock.conf`, `hypridle.conf`, `monitors.conf`, `workspaces.conf` — self-explanatory.
 
 ## Commands
+
+### Fork maintenance (`./fork`)
+
+Fork-local helper (not upstream's). Keeps this branch current with upstream and keeps the repo and `$HOME` from silently drifting apart.
+
+```bash
+./fork status    # ahead/behind counts, deploy state, repo-vs-$HOME drift
+./fork update    # fetch upstream -> ff main -> merge main into KemonoNecoTweaks
+./fork capture   # $HOME -> repo, for edits made directly in ~/.config
+./fork deploy    # repo -> $HOME, for the paths ./setup won't overwrite
+```
+
+`DOTS_FORK_BRANCH` overrides the tweaks branch name.
+
+The `MINE` array in `fork` lists the paths this fork owns in `$HOME`: `.config/hypr/custom`, `.config/hypr/monitors.lua`, `.config/illogical-impulse/config.json`, `.config/quickshell/ii`. Upstream's installer deliberately refuses to overwrite most of those (`custom/` is `skip-if-exists`, `hypridle.conf`/`hyprlock.conf` are `soft-backup` and land as `*.new`), which is why `deploy` exists — in a fork the repo is the source of truth for them. Everything else under `dots/` still reaches `$HOME` via `./setup install-files`.
+
+Both directions rsync with `--delete` and skip runtime/generated files (`*.new`, `*.old`, `.qmlls.ini`, `custom/scripts/__restore_video_wallpaper.sh`). matugen outputs (`hypr/hyprland/colors.lua`, `hyprlock/colors.conf`, `fuzzel_theme.ini`, `gtk-*/gtk.css`) are outside `MINE` on purpose — they regenerate per wallpaper and would churn on every capture. `.config/fish/conf.d` is also outside `MINE` on purpose: it holds machine-local secrets (API keys) that must not reach a public fork.
+
+`deploy` records the deployed commit in `~/.local/state/dots-fork/deployed-sha`; `capture` refuses to run when `$HOME` is older than `HEAD` (which would revert freshly merged upstream files) unless given `--force`. `capture` requires a clean tree, so `git restore .` always undoes one.
+
+Typical update cycle:
+```bash
+./fork capture && git commit -am "capture live config"   # if you edited ~/.config directly
+./fork update                                            # resolve conflicts if any
+./fork deploy && ./setup install-files                   # push it all back out
+pkill qs; qs -c ii                                       # restart the shell
+git push origin main KemonoNecoTweaks
+```
 
 ### Install / update (on a real machine)
 ```bash

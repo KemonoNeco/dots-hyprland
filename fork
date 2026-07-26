@@ -1,0 +1,209 @@
+#!/usr/bin/env bash
+# fork — keep this fork of end-4/dots-hyprland in sync with upstream and with
+# the live config in $HOME.
+#
+#   ./fork status    what's ahead/behind, what drifted between repo and $HOME
+#   ./fork update    fetch upstream -> ff main -> merge main into the tweaks branch
+#   ./fork capture   $HOME -> repo (pick up edits made directly in ~/.config)
+#   ./fork deploy    repo -> $HOME (for the paths upstream's installer won't overwrite)
+#
+# Layout this assumes:
+#   remote upstream = end-4/dots-hyprland, remote origin = your fork
+#   main            = pristine mirror of upstream, never committed to
+#   tweaks branch   = your changes, kept current by merging main into it
+set -euo pipefail
+cd "$(dirname "$0")"
+REPO="$PWD"
+
+TWEAKS_BRANCH="${DOTS_FORK_BRANCH:-KemonoNecoTweaks}"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/dots-fork"
+DEPLOYED_FILE="$STATE_DIR/deployed-sha"
+
+# Paths this fork owns, relative to $HOME. `capture` treats the live copy as
+# authoritative, `deploy` treats the repo copy as authoritative. Everything else
+# under dots/ is upstream-managed and reaches $HOME via `./setup install-files`.
+MINE=(
+  .config/hypr/custom
+  .config/hypr/monitors.lua
+  .config/illogical-impulse/config.json
+  .config/quickshell/ii
+)
+
+# Runtime junk and installer leftovers never travel in either direction.
+# Note: matugen-generated files (hypr/hyprland/colors.lua, hyprlock/colors.conf,
+# fuzzel_theme.ini, gtk-*/gtk.css) are outside MINE on purpose — they are
+# regenerated from the wallpaper and would churn on every capture.
+EXCLUDES=(
+  --exclude .git --exclude .gitmodules --exclude .qmlls.ini
+  --exclude '*.new' --exclude '*.old' --exclude '*.old.*' --exclude '*~'
+  # written by scripts/colors/switchwall.sh on every wallpaper change
+  --exclude __restore_video_wallpaper.sh
+)
+
+C_RST=$'\033[0m'; C_B=$'\033[1m'; C_Y=$'\033[33m'; C_G=$'\033[32m'; C_R=$'\033[31m'
+info() { printf '%s\n' "$*"; }
+head_() { printf '%s%s%s\n' "$C_B" "$*" "$C_RST"; }
+warn() { printf '%s%s%s\n' "$C_Y" "$*" "$C_RST"; }
+ok() { printf '%s%s%s\n' "$C_G" "$*" "$C_RST"; }
+die() { printf '%s%s%s\n' "$C_R" "$*" "$C_RST" >&2; exit 1; }
+
+require_clean_tree() {
+  git diff --quiet && git diff --cached --quiet ||
+    { git status --short; die "Uncommitted changes — commit or stash first."; }
+}
+
+require_remotes() {
+  git remote get-url upstream &>/dev/null || die "No 'upstream' remote (expected end-4/dots-hyprland)."
+  git remote get-url origin &>/dev/null || die "No 'origin' remote (expected your fork)."
+}
+
+# rsync one path; handles files and directories, creating parents as needed.
+sync_one() {
+  local src=$1 dst=$2
+  if [[ -d $src ]]; then
+    mkdir -p "$dst"
+    rsync -a --delete "${EXCLUDES[@]}" "$src/" "$dst/"
+  elif [[ -f $src ]]; then
+    mkdir -p "$(dirname "$dst")"
+    rsync -a "$src" "$dst"
+  else
+    return 1
+  fi
+}
+
+drift() { # $1 src $2 dst — names of files a sync would change; empty if in sync
+  local src=$1 dst=$2
+  { if [[ -d $src ]]; then
+      rsync -ni -a --delete "${EXCLUDES[@]}" "$src/" "$dst/" 2>/dev/null
+    elif [[ -f $src ]]; then
+      rsync -ni -a "$src" "$dst" 2>/dev/null
+    fi
+  } | awk '$1 !~ /^[c.]d/ {print $NF}'   # drop directory-only entries
+}
+
+cmd_status() {
+  require_remotes
+  head_ "Branches"
+  info "  on:       $(git rev-parse --abbrev-ref HEAD)"
+  git fetch --quiet --multiple upstream origin || warn "  (fetch failed — counts may be stale)"
+  info "  main:     $(git rev-list --count main..upstream/main) behind upstream, $(git rev-list --count upstream/main..main) ahead"
+  if git show-ref --verify --quiet "refs/heads/$TWEAKS_BRANCH"; then
+    info "  $TWEAKS_BRANCH: $(git rev-list --count "$TWEAKS_BRANCH..main") upstream commits not merged in, $(git rev-list --count "main..$TWEAKS_BRANCH") of your own"
+  fi
+
+  head_ "Deploy state"
+  local head_sha; head_sha=$(git rev-parse --short HEAD)
+  if [[ -f $DEPLOYED_FILE ]]; then
+    local dep; dep=$(<"$DEPLOYED_FILE")
+    if [[ $dep == "$(git rev-parse HEAD)" ]]; then
+      ok "  \$HOME is at HEAD ($head_sha)"
+    else
+      warn "  \$HOME was last deployed from ${dep:0:8}, HEAD is $head_sha — run ./fork deploy"
+    fi
+  else
+    warn "  never deployed by ./fork (HEAD $head_sha)"
+  fi
+
+  head_ "Drift between repo and \$HOME"
+  local clean=true out n
+  for p in "${MINE[@]}"; do
+    out=$(drift "$HOME/$p" "$REPO/dots/$p" || true)
+    [[ -z $out ]] && continue
+    clean=false
+    n=$(printf '%s\n' "$out" | wc -l)
+    info "  $C_Y$p$C_RST — $n file(s) differ"
+    printf '%s\n' "$out" | head -6 | sed 's/^/      /'
+    ((n > 6)) && info "      … and $((n - 6)) more"
+  done
+  if $clean; then
+    ok "  in sync"
+  else
+    info "  ./fork capture -> pull \$HOME into the repo, ./fork deploy -> push the repo out"
+  fi
+}
+
+cmd_update() {
+  require_remotes
+  require_clean_tree
+  local start_branch; start_branch=$(git rev-parse --abbrev-ref HEAD)
+
+  head_ "Fetching upstream"
+  git fetch upstream
+
+  head_ "Fast-forwarding main"
+  git checkout main
+  git merge --ff-only upstream/main ||
+    die "main has diverged from upstream. main must stay a pristine mirror; move your commits onto $TWEAKS_BRANCH."
+  ok "main at $(git rev-parse --short main)"
+
+  head_ "Merging main into $TWEAKS_BRANCH"
+  git checkout "$TWEAKS_BRANCH"
+  if git merge --no-edit main; then
+    ok "Merged. HEAD is $(git rev-parse --short HEAD)"
+    info "Next: ./fork deploy   then   ./setup install-files   (upstream-managed files)"
+    info "Then: git push origin main $TWEAKS_BRANCH"
+  else
+    warn "Conflicts:"
+    git diff --name-only --diff-filter=U | sed 's/^/  /'
+    info ""
+    info "Resolve, then: git add <files> && git commit"
+    info "Or abandon:    git merge --abort"
+    [[ $start_branch != "$TWEAKS_BRANCH" ]] && info "(you started on $start_branch)"
+    exit 1
+  fi
+}
+
+cmd_capture() {
+  require_clean_tree
+  if [[ ! -f $DEPLOYED_FILE ]]; then
+    warn "No deploy state recorded — capture is only safe if \$HOME is at least as new as this branch."
+    warn "Nothing is committed here, so 'git restore .' undoes a bad capture."
+  elif [[ "$(<"$DEPLOYED_FILE")" != "$(git rev-parse HEAD)" && ${1:-} != --force ]]; then
+    warn "\$HOME was last deployed from $(cut -c1-8 <"$DEPLOYED_FILE"), HEAD is $(git rev-parse --short HEAD)."
+    die "Capturing now would overwrite repo commits with an older live copy. Run ./fork deploy first, or ./fork capture --force."
+  fi
+
+  head_ "Capturing \$HOME -> repo"
+  for p in "${MINE[@]}"; do
+    if sync_one "$HOME/$p" "$REPO/dots/$p"; then
+      info "  $p"
+    else
+      warn "  $p (missing in \$HOME, skipped)"
+    fi
+  done
+
+  if git diff --quiet; then
+    ok "No changes."
+    return
+  fi
+  head_ "Changed"
+  git diff --stat | sed 's/^/  /'
+  info ""
+  info "Review:  git diff"
+  info "Keep:    git commit -am 'capture live config'"
+  info "Discard: git restore ."
+}
+
+cmd_deploy() {
+  head_ "Deploying repo -> \$HOME"
+  for p in "${MINE[@]}"; do
+    if sync_one "$REPO/dots/$p" "$HOME/$p"; then
+      info "  $p"
+    else
+      warn "  $p (missing in repo, skipped)"
+    fi
+  done
+  mkdir -p "$STATE_DIR"
+  git rev-parse HEAD >"$DEPLOYED_FILE"
+  ok "Deployed $(git rev-parse --short HEAD) ($(git rev-parse --abbrev-ref HEAD))"
+  info "Upstream-managed files (hypr/hyprland, fuzzel, matugen, …): ./setup install-files"
+  info "Restart the shell to pick up QML changes: pkill qs; qs -c ii"
+}
+
+case ${1:-} in
+  status) cmd_status ;;
+  update) cmd_update ;;
+  capture) shift; cmd_capture "$@" ;;
+  deploy) cmd_deploy ;;
+  *) awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0" ;;
+esac

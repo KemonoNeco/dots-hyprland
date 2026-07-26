@@ -16,6 +16,12 @@ __pycache__/
 # Emacs auto backup file
 *~
 
+# Dead pre-lua Hyprland user overrides. `hyprland.lua` only sources
+# `custom/*.lua`, so these linger in $HOME from older installs and carry no
+# config. Not tracked, but not deleted either — `./fork deploy` leaves files
+# that exist in the working tree alone.
+/dots/.config/hypr/custom/*.conf
+
 # NOTE: `/.claude/` and `/CLAUDE.md` are ignored on `main` but tracked on
 # this branch. Do not re-add those ignores here, or personal Claude Code
 # state and guidance will stop being versioned. If `.claude/` or
