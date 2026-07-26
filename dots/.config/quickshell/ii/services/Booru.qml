@@ -322,105 +322,107 @@ Singleton {
     }
     property var currentProvider: Persistent.states.booru.provider
 
-    property var e621Blacklist: []
-    property string e621BlacklistUser: ""
-    onCurrentProviderChanged: {
-        if (currentProvider === "e621") root.refreshE621Blacklist()
+    // ------------------------------------------------------------------- e621
+    // e621 wants two things the other providers don't: a project-identifying
+    // User-Agent (https://e621.net/help/api#user-agents) and HTTP Basic auth for
+    // anything account-scoped (favourites, votes, the account blacklist).
+    readonly property string e621Username: {
+        const name = Config.options?.sidebar?.booru?.e621?.username ?? ""
+        return (name && name !== "[unset]") ? name : ""
     }
-    Component.onCompleted: {
-        if (currentProvider === "e621") root.refreshE621Blacklist()
+    readonly property string e621ApiKey: KeyringStorage.keyringData?.apiKeys?.e621 ?? ""
+    readonly property bool e621Authed: e621Username.length > 0 && e621ApiKey.length > 0
+    readonly property string e621UserAgent: `illogical-impulse-sidebar/1.0 (by ${e621Username || "anonymous"} on e621)`
+    // e621 answers 422 "You cannot search for more than 40 tags at a time" beyond
+    // this, whether or not you are logged in.
+    readonly property int e621MaxQueryTags: 40
+
+    function setE621Headers(xhr) {
+        xhr.setRequestHeader("User-Agent", root.e621UserAgent)
+        if (root.e621Authed)
+            xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(`${root.e621Username}:${root.e621ApiKey}`))
     }
 
-    function e621Authed() {
-        const username = Config.options?.sidebar?.booru?.e621?.username
-        const apiKey = KeyringStorage.keyringData?.apiKeys?.e621
-        return username && username !== "[unset]" && apiKey && apiKey.length > 0
-    }
-
-    function setE621AuthHeaders(xhr) {
-        // e621 rejects generic browser UAs. A project-identifying UA is required.
-        // Docs: https://e621.net/help/api#user-agents
-        const username = Config.options?.sidebar?.booru?.e621?.username
-        const contactTag = (username && username !== "[unset]") ? username : "anonymous"
-        xhr.setRequestHeader("User-Agent",
-            `illogical-impulse-sidebar/1.0 (by ${contactTag} on e621)`)
-        const apiKey = KeyringStorage.keyringData?.apiKeys?.e621
-        if (username && username !== "[unset]" && apiKey) {
-            xhr.setRequestHeader("Authorization", "Basic " + Qt.btoa(username + ":" + apiKey))
+    // Blacklisting happens in the *query*: e621 applies its own blacklist in its
+    // front-end rather than the API, but the API does understand negation, so we
+    // hand the rules to the server instead of filtering afterwards. That keeps a page
+    // of `limit` results a page of `limit` usable results, and gets wildcards and
+    // metatags (`-young*`, `-rating:e`) for free.
+    property var e621AccountRules: []
+    readonly property var e621Negations: {
+        const rules = (Config.options?.sidebar?.booru?.e621?.blacklist ?? "").split("\n")
+            .concat(root.e621AccountRules)
+        const terms = []
+        const skipped = []
+        for (const line of rules) {
+            const rule = line.trim()
+            if (rule.length === 0 || rule.startsWith("#")) continue
+            // A rule listing several tags means "hide posts matching all of them",
+            // which no single negation expresses; same for the `-` and `~` operators,
+            // which are only meaningful inside such a rule. Report, don't ignore.
+            if (/\s/.test(rule) || rule.startsWith("-") || rule.startsWith("~")) skipped.push(rule)
+            else if (!terms.includes(`-${rule}`)) terms.push(`-${rule}`)
         }
+        if (skipped.length > 0)
+            console.log(`[Booru/e621] ${skipped.length} blacklist rule(s) can't be expressed as a search and were not applied:`, skipped.join(" | "))
+        return terms
     }
 
-    function parseE621BlacklistLine(line) {
-        // Each line is a space-separated AND clause; leading "-" negates a tag.
-        const trimmed = line.trim()
-        if (!trimmed || trimmed.startsWith("#")) return null
-        const parts = trimmed.split(/\s+/).filter(p => p.length > 0)
-        if (parts.length === 0) return null
-        return parts.map(tok => {
-            if (tok.startsWith("-")) return { tag: tok.substring(1), negated: true }
-            return { tag: tok, negated: false }
-        })
+    // Negations count against the tag ceiling, so a long blacklist can crowd out the
+    // tags actually being searched for. Say so rather than quietly filtering less.
+    property int e621ReportedTruncation: 0
+    function e621QueryNegations(tagCount) {
+        if (!(Config.options?.sidebar?.booru?.e621?.applyBlacklist ?? true)) return []
+        const applied = root.e621Negations.slice(0, Math.max(0, root.e621MaxQueryTags - tagCount))
+        const dropped = root.e621Negations.length - applied.length
+        if (dropped > 0 && dropped !== root.e621ReportedTruncation) {
+            root.e621ReportedTruncation = dropped
+            root.addSystemMessage(Translation.tr("%1 blacklist rule(s) left out — e621 allows %2 tags per search. Shorten the blacklist or search fewer tags.")
+                .arg(dropped).arg(root.e621MaxQueryTags))
+        }
+        return applied
     }
 
-    function refreshE621Blacklist() {
-        if (!root.e621Authed()) {
-            root.e621Blacklist = []
-            root.e621BlacklistUser = ""
+    function refreshE621AccountBlacklist() {
+        if (!root.e621Authed) {
+            root.e621AccountRules = []
             return
         }
-        const username = Config.options.sidebar.booru.e621.username
-        if (root.e621BlacklistUser === username && root.e621Blacklist.length > 0) return
         const xhr = new XMLHttpRequest()
-        xhr.open("GET", "https://e621.net/users/" + encodeURIComponent(username) + ".json")
-        root.setE621AuthHeaders(xhr)
+        xhr.open("GET", `https://e621.net/users/${encodeURIComponent(root.e621Username)}.json`)
+        root.setE621Headers(xhr)
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== XMLHttpRequest.DONE) return
             if (xhr.status !== 200) {
-                console.log("[Booru/e621] Blacklist fetch failed:", xhr.status)
+                console.log("[Booru/e621] Could not read the account blacklist:", xhr.status)
                 return
             }
             try {
-                const user = JSON.parse(xhr.responseText)
-                const raw = user.blacklisted_tags ?? ""
-                const parsed = raw.split("\n").map(root.parseE621BlacklistLine).filter(x => x)
-                root.e621Blacklist = parsed
-                root.e621BlacklistUser = username
+                root.e621AccountRules = (JSON.parse(xhr.responseText).blacklisted_tags ?? "").split("\n")
             } catch (e) {
-                console.log("[Booru/e621] Blacklist parse failed:", e)
+                console.log("[Booru/e621] Could not parse the account blacklist:", e)
             }
         }
         xhr.send()
     }
+    // Credentials arrive late (the keyring loads asynchronously) and can change from
+    // either the settings page or the chat commands.
+    onE621AuthedChanged: root.refreshE621AccountBlacklist()
+    onE621UsernameChanged: root.refreshE621AccountBlacklist()
 
-    function combinedE621Blacklist() {
-        const localRaw = Config.options?.sidebar?.booru?.e621?.blacklist ?? ""
-        const local = localRaw.split("\n").map(root.parseE621BlacklistLine).filter(x => x)
-        return local.concat(root.e621Blacklist || [])
-    }
-
-    function matchesE621Blacklist(tagString) {
-        const all = root.combinedE621Blacklist()
-        if (all.length === 0) return false
-        const tagSet = {}
-        tagString.split(" ").forEach(t => { if (t) tagSet[t] = true })
-        return all.some(expr => {
-            return expr.every(entry => entry.negated ? !tagSet[entry.tag] : !!tagSet[entry.tag])
-        })
-    }
-
-    function sendE621Auth(method, path, body, onOk) {
-        if (!root.e621Authed()) {
-            root.addSystemMessage(Translation.tr("e621: set username + API key in Settings → Services first"))
+    function sendE621Request(method, path, body, onOk) {
+        if (!root.e621Authed) {
+            root.addSystemMessage(Translation.tr("e621: set your username and API key in Settings → Services first"))
             return
         }
         const xhr = new XMLHttpRequest()
-        xhr.open(method, "https://e621.net" + path)
-        root.setE621AuthHeaders(xhr)
+        xhr.open(method, `https://e621.net${path}`)
+        root.setE621Headers(xhr)
         if (body) xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded")
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== XMLHttpRequest.DONE) return
             if (xhr.status >= 200 && xhr.status < 300) {
-                if (onOk) onOk(xhr)
+                if (onOk) onOk()
             } else {
                 root.addSystemMessage(Translation.tr("e621: request failed (%1)").arg(xhr.status))
             }
@@ -428,19 +430,17 @@ Singleton {
         xhr.send(body ?? null)
     }
 
-    function e621Favorite(postId) {
-        root.sendE621Auth("POST", "/favorites.json", "post_id=" + postId,
-            () => root.addSystemMessage(Translation.tr("Added to favorites")))
-    }
-
-    function e621Unfavorite(postId) {
-        root.sendE621Auth("DELETE", "/favorites/" + postId + ".json", null,
-            () => root.addSystemMessage(Translation.tr("Removed from favorites")))
+    function e621SetFavorite(postId, favorited, onOk) {
+        const done = () => {
+            root.addSystemMessage(favorited ? Translation.tr("Added to favorites") : Translation.tr("Removed from favorites"))
+            if (onOk) onOk()
+        }
+        if (favorited) root.sendE621Request("POST", "/favorites.json", `post_id=${postId}`, done)
+        else root.sendE621Request("DELETE", `/favorites/${postId}.json`, null, done)
     }
 
     function e621Vote(postId, score) {
-        root.sendE621Auth("POST", "/posts/" + postId + "/votes.json",
-            "score=" + score + "&no_unvote=true",
+        root.sendE621Request("POST", `/posts/${postId}/votes.json`, `score=${score}&no_unvote=true`,
             () => root.addSystemMessage(score > 0 ? Translation.tr("Upvoted") : Translation.tr("Downvoted")))
     }
 
@@ -488,6 +488,10 @@ Singleton {
                 tagString += " rating:s"; // e621 uses short rating codes (s/q/e)
             else
                 tagString += " rating:safe";
+        }
+        if (currentProvider === "e621") {
+            const negations = root.e621QueryNegations(tagString.split(" ").filter(t => t.length > 0).length)
+            if (negations.length > 0) tagString += " " + negations.join(" ")
         }
         var params = []
         // Tags & limit
@@ -556,20 +560,6 @@ Singleton {
                         response = provider.mapFunc(response)
                     }
                     // console.log("[Booru] Mapped response: " + JSON.stringify(response))
-                    if (currentProvider === "e621") {
-                        const bl = root.combinedE621Blacklist()
-                        const apply = Config.options?.sidebar?.booru?.e621?.applyBlacklist
-                        console.log(`[Booru] e621 blacklist: apply=${apply}, rules=${bl.length}`)
-                        if (apply && bl.length > 0) {
-                            let hits = 0
-                            response = response.map(img => {
-                                img.is_blacklisted = root.matchesE621Blacklist(img.tags)
-                                if (img.is_blacklisted) hits++
-                                return img
-                            })
-                            console.log(`[Booru] blacklist hid ${hits} of ${response.length} results`)
-                        }
-                    }
                     newResponse.images = response
                     newResponse.message = response.length > 0 ? "" : root.failMessage
                     
@@ -600,7 +590,7 @@ Singleton {
                 xhr.setRequestHeader("User-Agent", userAgent)
             }
             else if (currentProvider == "e621") {
-                root.setE621AuthHeaders(xhr)
+                root.setE621Headers(xhr)
             }
             root.runningRequests++;
             xhr.send()
@@ -651,7 +641,7 @@ Singleton {
                 xhr.setRequestHeader("User-Agent", defaultUserAgent)
             }
             else if (currentProvider == "e621") {
-                root.setE621AuthHeaders(xhr)
+                root.setE621Headers(xhr)
             }
             xhr.send()
         } catch (error) {

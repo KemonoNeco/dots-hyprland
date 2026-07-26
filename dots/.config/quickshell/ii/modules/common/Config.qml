@@ -506,16 +506,17 @@ Singleton {
                 }
                 property JsonObject booru: JsonObject {
                     property bool allowNsfw: false
-                    property string defaultProvider: "e621"
+                    property string defaultProvider: "yandere"
                     property int limit: 20
                     property JsonObject zerochan: JsonObject {
                         property string username: "[unset]"
                     }
                     property JsonObject e621: JsonObject {
                         property string username: "[unset]"
+                        // This list and (when logged in) the account blacklist are handed
+                        // to e621 as query negations, so wildcards and metatags work:
+                        // `young*`, `rating:e`. One tag per line.
                         property bool applyBlacklist: true
-                        // Local blacklist — one rule per line; space-separated tags are AND-combined;
-                        // prefix with "-" to negate. Combined with the account blacklist (if logged in).
                         property string blacklist: "young\nyoung_anthro\nyoung_human"
                     }
                 }

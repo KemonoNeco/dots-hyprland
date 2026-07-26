@@ -292,21 +292,25 @@ ContentPage {
 
         MaterialTextField {
             Layout.fillWidth: true
-            placeholderText: Translation.tr("API key (stored in keyring)")
+            placeholderText: Translation.tr("API key (stored in the keyring)")
             text: KeyringStorage.keyringData?.apiKeys?.e621 ?? ""
             echoMode: TextInput.Password
-            onTextChanged: {
+            // Every write spawns a `secret-tool store`, so commit once the field is
+            // done rather than on each keystroke.
+            onEditingFinished: {
                 if (text !== (KeyringStorage.keyringData?.apiKeys?.e621 ?? "")) {
                     KeyringStorage.setNestedField(["apiKeys", "e621"], text);
                 }
             }
         }
 
-        ConfigSwitch {
-            text: Translation.tr("Apply blacklist from account")
-            checked: Config.options?.sidebar?.booru?.e621?.applyBlacklist ?? true
-            onCheckedChanged: {
-                Config.options.sidebar.booru.e621.applyBlacklist = checked;
+        MaterialTextArea {
+            Layout.fillWidth: true
+            placeholderText: Translation.tr("Blacklist — one tag per line, wildcards and metatags allowed")
+            text: Config.options?.sidebar?.booru?.e621?.blacklist ?? ""
+            wrapMode: TextEdit.Wrap
+            onTextChanged: {
+                Config.options.sidebar.booru.e621.blacklist = text;
             }
         }
     }

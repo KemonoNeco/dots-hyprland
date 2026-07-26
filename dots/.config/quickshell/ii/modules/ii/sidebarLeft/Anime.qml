@@ -70,54 +70,64 @@ Item {
             }
         },
         {
+            name: "safe",
+            description: Translation.tr("Disable NSFW content"),
+            execute: () => {
+                Persistent.states.booru.allowNsfw = false;
+            }
+        },
+        {
+            name: "lewd",
+            description: Translation.tr("Allow NSFW content"),
+            execute: () => {
+                Persistent.states.booru.allowNsfw = true;
+            }
+        },
+        {
             name: "favs",
             description: Translation.tr("Search your e621 favorites"),
             execute: (args) => {
                 if (Booru.currentProvider !== "e621") {
-                    Booru.addSystemMessage(Translation.tr("Use /mode e621 first"));
+                    Booru.addSystemMessage(Translation.tr("Switch to e621 first: %1mode e621").arg(root.commandPrefix));
                     return;
                 }
-                const username = Config.options?.sidebar?.booru?.e621?.username;
-                if (!username || username === "[unset]") {
-                    Booru.addSystemMessage(Translation.tr("Set your e621 username with /user NAME or in Settings → Services"));
+                if (Booru.e621Username.length === 0) {
+                    Booru.addSystemMessage(Translation.tr("Set your e621 username first: %1user NAME").arg(root.commandPrefix));
                     return;
                 }
                 const extra = (args ?? []).join(" ").trim();
-                const query = extra.length > 0 ? `fav:${username} ${extra}` : `fav:${username}`;
-                root.handleInput(query);
+                root.handleInput(`fav:${Booru.e621Username} ${extra}`.trim());
             }
         },
         {
             name: "user",
-            description: Translation.tr("Set e621 username: /user NAME"),
+            description: Translation.tr("Set your e621 username"),
             execute: (args) => {
                 const name = (args?.[0] ?? "").trim();
-                if (!name) {
-                    Booru.addSystemMessage(Translation.tr("Usage: /user YOUR_E621_USERNAME"));
+                if (name.length === 0) {
+                    Booru.addSystemMessage(Translation.tr("Usage: %1user YOUR_E621_USERNAME").arg(root.commandPrefix));
                     return;
                 }
                 Config.options.sidebar.booru.e621.username = name;
-                Booru.addSystemMessage(Translation.tr("e621 username set to ") + name);
-                if (Booru.currentProvider === "e621") Booru.refreshE621Blacklist();
+                Booru.addSystemMessage(Translation.tr("e621 username set to %1").arg(name));
             }
         },
         {
             name: "key",
-            description: Translation.tr("Set e621 API key: /key API_KEY"),
+            description: Translation.tr("Set your e621 API key"),
             execute: (args) => {
                 const key = (args?.[0] ?? "").trim();
-                if (!key) {
-                    Booru.addSystemMessage(Translation.tr("Usage: /key YOUR_E621_API_KEY (get one at e621.net/users/home → Manage API Access)"));
+                if (key.length === 0) {
+                    Booru.addSystemMessage(Translation.tr("Usage: %1key YOUR_E621_API_KEY — get one at e621.net/users/home → Manage API Access").arg(root.commandPrefix));
                     return;
                 }
                 KeyringStorage.setNestedField(["apiKeys", "e621"], key);
-                Booru.addSystemMessage(Translation.tr("e621 API key saved to keyring"));
-                if (Booru.currentProvider === "e621") Booru.refreshE621Blacklist();
+                Booru.addSystemMessage(Translation.tr("e621 API key saved to the keyring"));
             }
         },
         {
             name: "logout",
-            description: Translation.tr("Clear e621 credentials"),
+            description: Translation.tr("Clear your e621 credentials"),
             execute: () => {
                 Config.options.sidebar.booru.e621.username = "[unset]";
                 KeyringStorage.setNestedField(["apiKeys", "e621"], "");
@@ -126,16 +136,26 @@ Item {
         },
         {
             name: "blacklist",
-            description: Translation.tr("Set local e621 blacklist: /blacklist tag1 tag2 ..."),
+            description: Translation.tr("Show or set the local e621 blacklist"),
             execute: (args) => {
-                const rules = (args ?? []).join(" ").trim();
-                Config.options.sidebar.booru.e621.blacklist = rules;
-                if (rules.length === 0) {
-                    Booru.addSystemMessage(Translation.tr("Local blacklist cleared"));
-                } else {
-                    const count = rules.split("\n").filter(l => l.trim().length > 0).length;
-                    Booru.addSystemMessage(Translation.tr("Local blacklist: %1 rule(s)").arg(count));
+                const words = (args ?? []).map(arg => arg.trim()).filter(arg => arg.length > 0);
+                if (words.length === 0) {
+                    const rules = (Config.options.sidebar.booru.e621.blacklist ?? "")
+                        .split("\n").filter(rule => rule.trim().length > 0);
+                    Booru.addSystemMessage(rules.length > 0
+                        ? Translation.tr("Local e621 blacklist:\n- %1").arg(rules.join("\n- "))
+                        : Translation.tr("Local e621 blacklist is empty. Set it with %1blacklist tag1 tag2, or edit it in Settings → Services.").arg(root.commandPrefix));
+                    return;
                 }
+                if (words.length === 1 && words[0] === "clear") {
+                    Config.options.sidebar.booru.e621.blacklist = "";
+                    Booru.addSystemMessage(Translation.tr("Local e621 blacklist cleared"));
+                    return;
+                }
+                // One tag per rule: a rule listing several tags only hides posts
+                // carrying all of them, which is never what this command means.
+                Config.options.sidebar.booru.e621.blacklist = words.join("\n");
+                Booru.addSystemMessage(Translation.tr("Local e621 blacklist: %1 rule(s)").arg(words.length));
             }
         },
     ]
@@ -598,12 +618,13 @@ Item {
 
                 MouseArea { // e621 blacklist toggle
                     visible: Booru.currentProvider === "e621"
-                    implicitWidth: visible ? blacklistSwitchesRow.implicitWidth : 0
+                    implicitWidth: blacklistSwitchesRow.implicitWidth
                     Layout.fillHeight: true
                     hoverEnabled: true
                     PointingHandInteraction {}
+                    // Write the option, not the switch, so the switch's binding survives.
                     onPressed: {
-                        blacklistSwitch.checked = !blacklistSwitch.checked
+                        Config.options.sidebar.booru.e621.applyBlacklist = !blacklistSwitch.checked
                     }
 
                     RowLayout {
@@ -624,7 +645,7 @@ Item {
                             scale: 0.6
                             Layout.alignment: Qt.AlignVCenter
                             checked: Config.options?.sidebar?.booru?.e621?.applyBlacklist ?? true
-                            onCheckedChanged: {
+                            onToggled: {
                                 Config.options.sidebar.booru.e621.applyBlacklist = checked;
                             }
                         }
