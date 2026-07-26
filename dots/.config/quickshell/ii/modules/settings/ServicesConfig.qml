@@ -304,6 +304,18 @@ ContentPage {
             }
         }
 
+        ConfigSwitch {
+            buttonIcon: "photo_library"
+            text: Translation.tr("Show a mascot when there are no results")
+            checked: Config.options?.sidebar?.booru?.e621?.showMascot ?? true
+            onCheckedChanged: {
+                Config.options.sidebar.booru.e621.showMascot = checked;
+            }
+            StyledToolTip {
+                text: Translation.tr("Fetches one of the mascots from e621's front page")
+            }
+        }
+
         MaterialTextArea {
             Layout.fillWidth: true
             placeholderText: Translation.tr("Blacklist — one tag per line, wildcards and metatags allowed")

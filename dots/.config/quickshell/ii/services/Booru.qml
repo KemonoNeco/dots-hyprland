@@ -410,6 +410,53 @@ Singleton {
     onE621AuthedChanged: root.refreshE621AccountBlacklist()
     onE621UsernameChanged: root.refreshE621AccountBlacklist()
 
+    // e621 serves the mascots from its own front page over the API, so an empty booru
+    // view can show one instead of a generic icon. The list is small and never changes
+    // mid-session, so it is fetched once, lazily — nothing asks for it until a mascot
+    // is actually about to be shown.
+    property var e621Mascots: []
+    property bool e621MascotsRequested: false
+    property int e621MascotIndex: 0
+    // Mascots offered on e926 are the ones e621 itself considers safe for work.
+    readonly property var e621MascotList: {
+        const safeOnly = !Persistent.states.booru.allowNsfw
+        return root.e621Mascots.filter(mascot => mascot.active
+            && (!safeOnly || (mascot.available_on ?? []).includes("e926")))
+    }
+    readonly property var e621Mascot: root.e621MascotList.length > 0
+        ? root.e621MascotList[root.e621MascotIndex % root.e621MascotList.length]
+        : null
+
+    function fetchE621Mascots() {
+        if (root.e621MascotsRequested) return
+        root.e621MascotsRequested = true
+        const xhr = new XMLHttpRequest()
+        xhr.open("GET", "https://e621.net/mascots.json")
+        root.setE621Headers(xhr)
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return
+            if (xhr.status !== 200) {
+                console.log("[Booru/e621] Could not load mascots:", xhr.status)
+                root.e621MascotsRequested = false // Let the next empty view try again
+                return
+            }
+            try {
+                root.e621Mascots = JSON.parse(xhr.responseText)
+                root.shuffleE621Mascot()
+            } catch (e) {
+                console.log("[Booru/e621] Could not parse mascots:", e)
+            }
+        }
+        xhr.send()
+    }
+
+    function shuffleE621Mascot() {
+        const count = root.e621MascotList.length
+        if (count < 2) return
+        // Skipping the current one keeps a shuffle from looking like it did nothing.
+        root.e621MascotIndex = (root.e621MascotIndex + 1 + Math.floor(Math.random() * (count - 1))) % count
+    }
+
     function sendE621Request(method, path, body, onOk) {
         if (!root.e621Authed) {
             root.addSystemMessage(Translation.tr("e621: set your username and API key in Settings → Services first"))
