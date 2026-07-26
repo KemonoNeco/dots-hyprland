@@ -20,7 +20,12 @@ Singleton {
     property var responses: []
     property int runningRequests: 0
     property var defaultUserAgent: Config.options?.networking?.userAgent || "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36"
-    property var providerList: Object.keys(providers).filter(provider => provider !== "system" && providers[provider].api)
+    // e621 leads the list everywhere it's shown: this fork is furry-themed, so
+    // it's the default provider and the one worth reaching for first.
+    property var providerList: {
+        const rest = Object.keys(providers).filter(provider => provider !== "system" && provider !== "e621" && providers[provider].api)
+        return ["e621", ...rest]
+    }
     property var providers: {
         "system": { "name": Translation.tr("System") },
         "yandere": {

@@ -76,6 +76,7 @@ Singleton {
 
             property JsonObject booru: JsonObject {
                 property bool allowNsfw: false
+                // The last provider picked, and the fork's default on first run.
                 property string provider: "e621"
             }
 
