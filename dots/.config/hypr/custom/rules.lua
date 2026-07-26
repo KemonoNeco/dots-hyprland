@@ -4,17 +4,12 @@
 
 -- ######## Terminal transparency ########
 -- The terminals draw their own translucent background (kitty: background_opacity,
--- foot: colors.alpha), so glyphs stay fully opaque. Hyprland's only job is to blur
--- what shows through: hyprland/rules.lua turns blur off for *every* window
--- (`class = ".*"` -> no_blur), so re-enable it for terminals here.
-local terminalClasses = {
-    "^(kitty)$",
-    "^(foot)$",
-    "^(footclient)$",
-    "^(Alacritty)$",
-    "^(org\\.wezfurlong\\.wezterm)$",
-    "^(org\\.kde\\.konsole)$",
-}
-for _, class in ipairs(terminalClasses) do
-    hl.window_rule({ match = { class = class }, no_blur = false })
-end
+-- foot: colors.alpha), so glyphs stay fully opaque and the wallpaper shows through
+-- sharp. Deliberately *not* blurred: hyprland/rules.lua disables blur for every
+-- window (`class = ".*"` -> no_blur) and that is left alone here.
+--
+-- To blur behind terminals instead, add `no_blur = false` rules for their classes
+-- (kitty, foot, footclient, Alacritty, org.kde.konsole, ...) — custom/ loads after
+-- hyprland/, so the false wins. Blur strength itself (decoration.blur.size/passes)
+-- is global and shared with the quickshell panels, so it cannot be softened for
+-- terminals alone.
