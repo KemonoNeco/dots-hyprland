@@ -24,7 +24,30 @@ The repo layout:
 - **Remotes:** `upstream` = `end-4/dots-hyprland`, `origin` = `KemonoNeco/dots-hyprland`.
 - **Branching:** `main` is a pristine mirror of `upstream/main` — fast-forward only, never commit to it. *All personal work lives on `KemonoNecoTweaks`*, which stays current by **merging** `main` into it (never rebasing — merges keep past conflict resolutions so each update only conflicts on genuinely new overlaps). Upstreamable fixes go on a `fix/*` branch off `main` and get PR'd from there, so `main` stays fast-forwardable. `git diff main KemonoNecoTweaks` is therefore always exactly "what this fork changes".
 - **`.claude/` and `CLAUDE.md` handling:** `main` ignores both via `.gitignore` and does not track them; `KemonoNecoTweaks` un-ignores both (`CLAUDE.md` is tracked here; `.claude/` is simply absent at repo root right now, but would be tracked if created). If you're reading this file, you're on `KemonoNecoTweaks` (or on a detached checkout with a stale working copy) — `CLAUDE.md` does not exist in `main`'s tree. Don't "fix" the diverging `.gitignore` by making them match, and don't port this file to `main` — the divergence is intentional so upstream-facing branches stay clean.
-- **Upstream PRs:** Follow upstream's rule of one feature per PR. Don't bundle personal/default changes into fix PRs. See `.github/CONTRIBUTING.md`.
+- **Upstream PRs:** Follow upstream's rule of one feature per PR. Don't bundle personal/default changes into fix PRs. See `.github/CONTRIBUTING.md` and the upstream-policy section below.
+
+## Upstream contribution & AI/LLM policy
+
+Verified against upstream `main` on 2026-07-26 (`.github/CONTRIBUTING.md`, `.github/pull_request_template.md`, `.github/ISSUE_TEMPLATE/`, `.github/workflows/`, and the wiki repo). Re-check before leaning on it — upstream edits these in place.
+
+**Contributing (`.github/CONTRIBUTING.md`):**
+- **One feature per PR** — restated in all-caps in `.github/pull_request_template.md`. Never bundle personal changes or changed defaults into a PR.
+- Upstream will accept features they don't personally want, *on condition* they're made configurable / optionally loaded. Anything fancy-but-heavy must default to off.
+- For something *big*, open a Discussion first rather than sunk-cost a large PR (already-written-for-yourself work is still fine to submit).
+- Python changes must use the `uv` venv from `sdata/uv/README.md`, not system pip.
+- The PR body just answers "Describe your changes" + "Is it ready? Questions/feedback needed?" — say explicitly when a PR is a draft/RFC.
+
+**Issues and Discussions:** blank issues are disabled (`ISSUE_TEMPLATE/config.yml`); the Issue form *requires* `./diagnose` output and a confirmation that the Troubleshooting + Usage wiki pages were read. "How do I edit widget X" goes to Discussions, and non-Arch distro problems go to the *Extra Distros* Discussion category, not Issues. `.github/workflows/auto-close-issue.yml` auto-comments, closes (`not_planned`) and **locks** any issue that ticks the joke checkbox "I've ticked the checkboxes without reading their contents" — so fill the template honestly.
+
+**AI/LLM use — what upstream actually enforces:**
+- `.github/workflows/moderator.yml` is an **AI Moderator** (`github/ai-moderator@v1`) with `enable-ai-detection`, `enable-spam-detection` and `enable-link-spam-detection` all on. It runs on every **opened issue**, every **issue comment** (this includes PR conversation comments) and every **PR review comment**, labels suspected machine-written content `ai-generated` (spam as `spam`), and `minimize-detected-comments: true` **auto-hides** what it flags. PR *descriptions* are not covered — the triggers include no `pull_request` event.
+  - Consequence for me: never paste raw model output into an upstream issue, comment, or review reply. Write upstream-facing prose myself, short and specific, in the reporter's own voice — flagged-and-minimized text is worse than no comment.
+  - Enforcement state as of 2026-07-26: `spam` exists as a repo label, `ai-generated` is not in the label list and no issue/PR carries it — the automation is armed but has not visibly fired.
+- There is **no policy banning AI-assisted code**, and no upstream agent-instruction file at all (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.github/copilot-instructions.md` are all absent). AI-written patches are neither blessed nor banned: they face the same human review bar — practicality for daily driving, configurable-and-off-by-default for heavy features, and the style rules below. Unverified generated code is what gets caught, so a patch must be *run* on a real machine (`pkill qs; qs -c ii`) before it's offered.
+- AI **is** explicitly endorsed for one thing: translation. The wiki repo's `rules/README.md` says AI translation is useful to "accelerate middle process of the translation" but "surely needs manual correction in the end", and `rules/<lang>.md` (`tr.md`, `zh-cn.md`) hold per-language glossaries/rules to feed the model so terminology stays consistent. Treat the shell's own `translations/` JSON the same way: machine-draft is fine, unreviewed machine output is not.
+- Don't confuse this with the shell's own AI *features* (`services/Ai.qml`, `defaults/ai/`, the sidebar chat) — that's product surface, unrelated to contribution policy.
+
+**Wiki PRs (`end-4/dots-hyprland-wiki`):** English (`src/content/docs/en/`) is the source of truth and must be updated first — other locales are translated from it. Don't translate Dev Notes (`docs/en/dev/`); they fall back to English on purpose. Bump `lastUpdated: yyyy-mm-dd` in a translated page's frontmatter — a GitHub Action diffs it against the English original to render the "outdated translation" banner. Adding a new locale also means `astro.config.mjs` (`locales:`, sidebar labels) and `l10n-notify/l10n-notify.json`. Contribution docs: https://ii.clsty.link/en/dev/doc-site-contrib/
 
 ## The Quickshell configuration (the bulk of the code)
 
