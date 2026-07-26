@@ -289,7 +289,7 @@ Item {
                 z: 2
                 shown: root.responses.length === 0
                 icon: "bookmark_heart"
-                title: Translation.tr("Anime boorus")
+                title: Translation.tr("Boorus")
                 description: ""
                 shape: MaterialShape.Shape.Bun
             }
