@@ -8,8 +8,7 @@
 -- sharp. Deliberately *not* blurred: hyprland/rules.lua disables blur for every
 -- window (`class = ".*"` -> no_blur) and that is left alone here.
 --
--- To blur behind terminals instead, add `no_blur = false` rules for their classes
--- (kitty, foot, footclient, Alacritty, org.kde.konsole, ...) — custom/ loads after
--- hyprland/, so the false wins. Blur strength itself (decoration.blur.size/passes)
--- is global and shared with the quickshell panels, so it cannot be softened for
--- terminals alone.
+-- To blur behind terminals instead, drop `decoration.blur.enabled = false` from
+-- custom/general.lua and add `no_blur = false` rules for their classes (kitty,
+-- foot, footclient, Alacritty, org.kde.konsole, ...) — custom/ loads after
+-- hyprland/, so the false wins.
