@@ -26,3 +26,8 @@ __pycache__/
 # this branch. Do not re-add those ignores here, or personal Claude Code
 # state and guidance will stop being versioned. If `.claude/` or
 # `CLAUDE.md` show up in `git status` on this branch, that's intentional.
+
+# ...with one exception: Claude Code puts its git worktrees here, which are whole
+# checkouts of this repo. Since `/.claude/` is un-ignored above, without this a
+# stray `git add .claude` would commit nested clones into the fork.
+/.claude/worktrees/
