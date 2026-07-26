@@ -518,6 +518,8 @@ Singleton {
                         // `young*`, `rating:e`. One tag per line.
                         property bool applyBlacklist: true
                         property string blacklist: "young\nyoung_anthro\nyoung_human"
+                        // Show a mascot from e621's front page when the view is empty
+                        property bool showMascot: true
                     }
                 }
                 property JsonObject cornerOpen: JsonObject {
