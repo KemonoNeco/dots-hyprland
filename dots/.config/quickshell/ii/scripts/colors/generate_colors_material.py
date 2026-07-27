@@ -7,6 +7,7 @@ from materialyoucolor.quantize import QuantizeCelebi
 from materialyoucolor.score.score import Score
 from materialyoucolor.hct import Hct
 from materialyoucolor.dynamiccolor.material_dynamic_colors import MaterialDynamicColors
+from materialyoucolor.palettes.tonal_palette import TonalPalette
 from materialyoucolor.utils.color_utils import (rgba_from_argb, argb_from_rgb, argb_from_rgba)
 from materialyoucolor.utils.math_utils import (sanitize_degrees_double, difference_degrees, rotation_direction)
 
@@ -24,6 +25,7 @@ parser.add_argument('--harmonize_threshold', type=float , default=100, help='(0-
 parser.add_argument('--term_fg_boost', type=float , default=0.35, help='Make terminal foreground more different from the background')
 parser.add_argument('--blend_bg_fg', action='store_true', default=False, help='Shift terminal background or foreground towards accent')
 parser.add_argument('--cache', type=str, default=None, help='file path to store the generated color')
+parser.add_argument('--mono_accent', action='store_true', default=False, help='Two-tone palette: greyscale surfaces, all accent families pinned to the source hue')
 parser.add_argument('--debug', action='store_true', default=False, help='debug mode')
 args = parser.parse_args()
 
@@ -110,6 +112,15 @@ else:
 # Generate
 scheme = Scheme(hct, darkmode, 0.0)
 
+if args.mono_accent:
+    # Strip the hue out of the neutral palettes so surfaces/outlines are pure greys,
+    # and pull the secondary/tertiary families onto the accent hue (keeping the
+    # scheme's own chroma for each) so nothing but the accent carries color.
+    scheme.neutral_palette = TonalPalette.from_hue_and_chroma(hct.hue, 0.0)
+    scheme.neutral_variant_palette = TonalPalette.from_hue_and_chroma(hct.hue, 0.0)
+    scheme.secondary_palette = TonalPalette.from_hue_and_chroma(hct.hue, scheme.secondary_palette.chroma)
+    scheme.tertiary_palette = TonalPalette.from_hue_and_chroma(hct.hue, scheme.tertiary_palette.chroma)
+
 material_colors = {}
 term_colors = {}
 
@@ -118,6 +129,21 @@ for color in vars(MaterialDynamicColors).keys():
     if hasattr(color_name, "get_hct"):
         rgba = color_name.get_hct(scheme).to_rgba()
         material_colors[color] = rgba_to_hex(rgba)
+
+if args.mono_accent and darkmode:
+    # In dark mode Material picks tone 80 for the main accent roles, which washes a
+    # saturated hue out into a pastel tint. Put the accent back in those slots at the tone
+    # the user picked it at, and darken its paired foregrounds so text on top stays
+    # readable. Light mode keeps Material's darker accent tones — a vivid accent used as
+    # foreground on a white surface fails contrast, and the vivid one still lands on the
+    # container roles there.
+    accent_hex = argb_to_hex(argb)
+    on_accent_hex = argb_to_hex(Hct.from_hct(hct.hue, hct.chroma, 10).to_int())
+    for role in ('primary', 'secondary', 'tertiary'):
+        material_colors[role] = accent_hex
+        material_colors['on' + role[0].upper() + role[1:]] = on_accent_hex
+    for role in ('surfaceTint', 'primaryFixedDim', 'secondaryFixedDim', 'tertiaryFixedDim'):
+        material_colors[role] = accent_hex
 
 # Extended material
 if darkmode == True:

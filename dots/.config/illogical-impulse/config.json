@@ -30,8 +30,10 @@
             "title": "Google Sans Flex"
         },
         "palette": {
-            "accentColor": "",
-            "type": "scheme-fidelity"
+            "accentColor": "#FF6600",
+            "lockAccentColor": true,
+            "monoAccent": true,
+            "type": "scheme-content"
         },
         "transparency": {
             "automatic": true,

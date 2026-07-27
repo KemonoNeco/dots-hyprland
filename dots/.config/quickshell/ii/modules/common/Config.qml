@@ -136,6 +136,8 @@ Singleton {
                 property JsonObject palette: JsonObject {
                     property string type: "auto" // Allowed: auto, scheme-content, scheme-expressive, scheme-fidelity, scheme-fruit-salad, scheme-monochrome, scheme-neutral, scheme-rainbow, scheme-tonal-spot
                     property string accentColor: ""
+                    property bool lockAccentColor: false // Keep accentColor when the wallpaper changes, instead of re-deriving it from the image
+                    property bool monoAccent: false // Greyscale surfaces, every accent family pinned to the accent hue
                 }
             }
 

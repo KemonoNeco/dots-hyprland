@@ -183,7 +183,12 @@ switch() {
 
     matugen_args=(--source-color-index 0)
 
-    if [[ "$color_flag" == "1" ]]; then
+    # A locked accent still lets the wallpaper change, so that case has to go through
+    # the wallpaper branch below and only override the colorgen source afterwards.
+    local switching_wallpaper=""
+    [[ -n "$imgpath" && -z "$noswitch_flag" ]] && switching_wallpaper="1"
+
+    if [[ "$color_flag" == "1" && -z "$switching_wallpaper" ]]; then
         matugen_args+=(color hex "$color")
         generate_colors_material_args=(--color "$color")
     else
@@ -257,6 +262,11 @@ switch() {
             set_wallpaper_path "$imgpath"
             remove_restore
         fi
+
+        if [[ "$color_flag" == "1" ]]; then
+            matugen_args=(--source-color-index 0 color hex "$color")
+            generate_colors_material_args=(--color "$color")
+        fi
     fi
 
     # Determine mode if not set
@@ -294,6 +304,7 @@ switch() {
     fi
 
     # Set harmony and related properties
+    local mono_accent=""
     if [ -f "$SHELL_CONFIG_FILE" ]; then
         harmony=$(jq -r '.appearance.wallpaperTheming.terminalGenerationProps.harmony' "$SHELL_CONFIG_FILE")
         harmonize_threshold=$(jq -r '.appearance.wallpaperTheming.terminalGenerationProps.harmonizeThreshold' "$SHELL_CONFIG_FILE")
@@ -301,12 +312,36 @@ switch() {
         [[ "$harmony" != "null" && -n "$harmony" ]] && generate_colors_material_args+=(--harmony "$harmony")
         [[ "$harmonize_threshold" != "null" && -n "$harmonize_threshold" ]] && generate_colors_material_args+=(--harmonize_threshold "$harmonize_threshold")
         [[ "$term_fg_boost" != "null" && -n "$term_fg_boost" ]] && generate_colors_material_args+=(--term_fg_boost "$term_fg_boost")
+        if [[ "$(jq -r '.appearance.palette.monoAccent' "$SHELL_CONFIG_FILE")" == "true" ]]; then
+            mono_accent="1"
+            generate_colors_material_args+=(--mono_accent)
+        fi
     fi
 
-    matugen "${matugen_args[@]}"
     source "$(eval echo $ILLOGICAL_IMPULSE_VIRTUAL_ENV)/bin/activate"
     python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" \
         > "$STATE_DIR"/user/generated/material_colors.scss
+
+    if [[ -n "$mono_accent" ]]; then
+        # matugen can't express a mono-accent palette, so hand it the one we just generated
+        # instead of letting it derive its own — otherwise GTK/Hyprland/fuzzel/hyprlock end
+        # up tinted while the shell stays neutral.
+        local matugen_json="$STATE_DIR/user/generated/matugen_colors.json"
+        local dark_scss="$STATE_DIR/user/generated/material_colors-dark.scss"
+        local light_scss="$STATE_DIR/user/generated/material_colors-light.scss"
+        for scheme_mode in dark light; do
+            # A trailing --mode wins over the one already in the array
+            python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" \
+                --mode "$scheme_mode" > "$STATE_DIR/user/generated/material_colors-$scheme_mode.scss"
+        done
+        python3 "$SCRIPT_DIR/material_scss_to_matugen_json.py" \
+            --dark "$dark_scss" --light "$light_scss" --mode "$mode_flag" \
+            --source-color "$(jq -r '.appearance.palette.accentColor' "$SHELL_CONFIG_FILE")" \
+            --image "$imgpath" --out "$matugen_json"
+        matugen json "$matugen_json" --mode "$mode_flag"
+    else
+        matugen "${matugen_args[@]}"
+    fi
     deactivate
     "$SCRIPT_DIR"/applycolor.sh
 
@@ -329,6 +364,9 @@ main() {
     }
     get_accent_color_from_config() {
         jq -r '.appearance.palette.accentColor' "$SHELL_CONFIG_FILE" 2>/dev/null || echo ""
+    }
+    accent_color_is_locked() {
+        [[ "$(jq -r '.appearance.palette.lockAccentColor' "$SHELL_CONFIG_FILE" 2>/dev/null)" == "true" ]]
     }
     set_accent_color() {
         local color="$1"
@@ -414,7 +452,7 @@ main() {
         imgpath="$(kdialog --getopenfilename . --title 'Choose wallpaper')"
     fi
 
-    if [[ -n "$imgpath" && -z "$noswitch_flag" ]]; then
+    if [[ -n "$imgpath" && -z "$noswitch_flag" ]] && ! accent_color_is_locked; then
         set_accent_color ""
         color_flag=""
         color=""
