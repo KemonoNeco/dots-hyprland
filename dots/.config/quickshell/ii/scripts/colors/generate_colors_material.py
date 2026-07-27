@@ -130,20 +130,29 @@ for color in vars(MaterialDynamicColors).keys():
         rgba = color_name.get_hct(scheme).to_rgba()
         material_colors[color] = rgba_to_hex(rgba)
 
-if args.mono_accent and darkmode:
-    # In dark mode Material picks tone 80 for the main accent roles, which washes a
-    # saturated hue out into a pastel tint. Put the accent back in those slots at the tone
-    # the user picked it at, and darken its paired foregrounds so text on top stays
-    # readable. Light mode keeps Material's darker accent tones — a vivid accent used as
-    # foreground on a white surface fails contrast, and the vivid one still lands on the
-    # container roles there.
+if args.mono_accent:
+    # Material spreads each accent family over its tonal range, which for a saturated hue
+    # means dark-orange (i.e. brown) fills under pastel foregrounds. Neither tone is the
+    # color the user picked, so put the accent itself in every accent slot and pair it with
+    # the darkest neutral instead.
     accent_hex = argb_to_hex(argb)
-    on_accent_hex = argb_to_hex(Hct.from_hct(hct.hue, hct.chroma, 10).to_int())
-    for role in ('primary', 'secondary', 'tertiary'):
+    on_accent_hex = argb_to_hex(scheme.neutral_palette.get_hct(10).to_int())
+    families = ('primary', 'secondary', 'tertiary')
+    accent_roles = ['surfaceTint']
+    accent_roles += [family + suffix for family in families
+                     for suffix in ('Container', 'Fixed', 'FixedDim')]
+    on_accent_roles = ['on' + family.capitalize() + suffix for family in families
+                       for suffix in ('Container', 'Fixed', 'FixedVariant')]
+    if darkmode:
+        # Light mode keeps Material's darker tones for these three: they are foreground
+        # roles there, and the accent itself on a white surface fails contrast.
+        accent_roles += list(families)
+        on_accent_roles += ['on' + family.capitalize() for family in families]
+
+    for role in accent_roles:
         material_colors[role] = accent_hex
-        material_colors['on' + role[0].upper() + role[1:]] = on_accent_hex
-    for role in ('surfaceTint', 'primaryFixedDim', 'secondaryFixedDim', 'tertiaryFixedDim'):
-        material_colors[role] = accent_hex
+    for role in on_accent_roles:
+        material_colors[role] = on_accent_hex
 
 # Extended material
 if darkmode == True:
