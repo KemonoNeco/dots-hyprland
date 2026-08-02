@@ -66,6 +66,22 @@ Conventions from `.github/CONTRIBUTING.md` (follow these):
 
 Gotcha: upstream does **not** migrate `custom/*.conf` for you — that step is manual, so those files linger in `$HOME` and in the working tree from pre-Lua installs. They are **dead** — `hyprland.lua` never sources them — and `.gitignore` excludes `/dots/.config/hypr/custom/*.conf` on purpose. Don't port changes into them or "restore" them to tracking; the live overrides are the `custom/*.lua` siblings.
 
+### What `custom/` currently overrides
+
+- `general.lua` — turns blur off globally (`decoration.blur.enabled = false`). Translucency is unchanged; only the sampling behind it is.
+- `rules.lua` — the terminal-transparency note (comment only, no rules), plus the DeskSaw block below.
+
+#### DeskSaw (desktop pet)
+
+[DeskSaw](https://github.com/dee-dee-catorce/desksaw) is a Godot desktop pet installed **outside this repo** at `~/Applications/DeskSaw`, launched by its own `desksaw` wrapper (also on `PATH` and in the app menu). It maps to window class `desktop expie`. `custom/rules.lua` owns two things for it:
+
+- Six window rules making the transparent Godot overlay read as a sprite on the desktop rather than a window: `float`, `pin`, `no_shadow`, `border_size = 0`, `rounding = 0`, `no_anim`.
+- A named `no_focus` rule (`desksaw-decorative`) held in the `DESKSAW_DECORATIVE` global, flipped by `SUPER + ALT + P`. `hl.window_rule` returns an `HL.WindowRule` with `is_enabled`/`set_enabled`, and toggling it **re-applies to already-mapped windows** — no reload needed.
+
+The toggle exists because the pet's per-region click-through does not work under Hyprland. It asks Godot for mouse passthrough outside the sprite; neither the XWayland path (X11 input shape) nor the native Wayland path honours it, verified both ways by clicking through the overlay onto a window below. So input is all-or-nothing: rule enabled → clicks fall through and the pet is decorative (the default, so a running pet never locks the desktop out); rule disabled → the pet is interactive and the overlay eats every click. Upstream tracks this as [desksaw#7](https://github.com/dee-dee-catorce/desksaw/issues/7).
+
+Two launch workarounds live in the wrapper script, not here: `--accessibility disabled` (Godot 4.7's accesskit layer panics on startup) and forcing XWayland via `--display-driver x11` plus `XDG_SESSION_TYPE=x11` (suppresses the app's own Wayland alert and gets working transparency).
+
 ## Commands
 
 ### Fork maintenance (`./fork`)
