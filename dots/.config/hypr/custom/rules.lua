@@ -1,3 +1,14 @@
 -- This file will not be overwritten across dots-hyprland updates.
 -- The file name is for the sake of organization and does not matter
 -- See the corresponding files in ~/.config/hypr/hyprland for examples
+
+-- ######## Terminal transparency ########
+-- The terminals draw their own translucent background (kitty: background_opacity,
+-- foot: colors.alpha), so glyphs stay fully opaque and the wallpaper shows through
+-- sharp. Deliberately *not* blurred: hyprland/rules.lua disables blur for every
+-- window (`class = ".*"` -> no_blur) and that is left alone here.
+--
+-- To blur behind terminals instead, drop `decoration.blur.enabled = false` from
+-- custom/general.lua and add `no_blur = false` rules for their classes (kitty,
+-- foot, footclient, Alacritty, org.kde.konsole, ...) — custom/ loads after
+-- hyprland/, so the false wins.
