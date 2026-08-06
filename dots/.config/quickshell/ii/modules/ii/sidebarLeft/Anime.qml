@@ -284,10 +284,24 @@ Item {
                 }
             }
 
+            Loader { // e621 dresses its empty state with one of its own mascots
+                id: mascotLoader
+                z: 2
+                anchors.fill: parent
+                active: Booru.currentProvider === "e621"
+                    && (Config.options?.sidebar?.booru?.e621?.showMascot ?? true)
+
+                sourceComponent: E621MascotPlaceholder {
+                    viewEmpty: root.responses.length === 0
+                }
+            }
+
             PagePlaceholder {
                 id: placeholderItem
                 z: 2
-                shown: root.responses.length === 0
+                // Holds the spot until a mascot is actually on screen, so switching to
+                // e621 never leaves the panel blank while the art loads.
+                shown: root.responses.length === 0 && !(mascotLoader.item?.hasArt ?? false)
                 icon: "bookmark_heart"
                 title: Translation.tr("Boorus")
                 description: ""
