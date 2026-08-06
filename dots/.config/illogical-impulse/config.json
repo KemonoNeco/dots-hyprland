@@ -234,7 +234,8 @@
             "org.kde.dolphin",
             "kitty",
             "brave-cinhimbnkkaeohfgghhklpknlkffjgod-default",
-            "steam"
+            "steam",
+            "desktop expie"
         ],
         "pinnedOnStartup": false
     },
@@ -401,7 +402,12 @@
         },
         "booru": {
             "allowNsfw": false,
-            "defaultProvider": "yandere",
+            "e621": {
+                "applyBlacklist": false,
+                "blacklist": "young\nyoung_anthro\nyoung_human",
+                "showMascot": true,
+                "username": "Kem0n0Neco"
+            },
             "limit": 20,
             "zerochan": {
                 "username": "[unset]"
