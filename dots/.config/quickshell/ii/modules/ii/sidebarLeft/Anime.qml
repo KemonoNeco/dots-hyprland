@@ -29,6 +29,34 @@ Item {
     property int pullLoadingGap: 80
     property real normalizedPullDistance: Math.max(0, (1 - Math.exp(-booruResponseListView.verticalOvershoot / 50)) * booruResponseListView.dragging)
 
+    // Icon-only switch for the input box's control row, which is too narrow in
+    // a sidebar to carry a labelled StyledSwitch per option.
+    component ControlToggle: RippleButton {
+        id: controlToggle
+        property string iconName // Not `icon`: Button already declares that one FINAL
+        property string tooltip
+
+        implicitWidth: 32
+        implicitHeight: 32
+        buttonRadius: Appearance.rounding.small
+        colBackground: Appearance.colors.colLayer2
+        colBackgroundHover: Appearance.colors.colLayer2Hover
+        colBackgroundToggled: Appearance.colors.colSecondaryContainer
+        colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
+
+        contentItem: MaterialSymbol {
+            anchors.centerIn: parent
+            horizontalAlignment: Text.AlignHCenter
+            iconSize: Appearance.font.pixelSize.large
+            color: controlToggle.toggled ? Appearance.colors.colOnSecondaryContainer : Appearance.colors.colSubtext
+            text: controlToggle.iconName
+        }
+
+        StyledToolTip {
+            text: controlToggle.tooltip
+        }
+    }
+
     Connections {
         target: Booru
         function onTagSuggestion(query, suggestions) {
@@ -568,102 +596,28 @@ Item {
 
                 property var commandsShown: [
                     {
-                        name: "mode",
-                        sendDirectly: false,
-                    },
-                    {
                         name: "clear",
                         sendDirectly: true,
-                    }, 
+                    },
                 ]
 
-                ApiInputBoxIndicator { // Tool indicator
-                    icon: "api"
-                    text: Booru.providers[Booru.currentProvider].name
-                    tooltipText: Translation.tr("Current API endpoint: %1\nSet it with %2mode PROVIDER")
-                        .arg(Booru.providers[Booru.currentProvider].url)
-                        .arg(root.commandPrefix)
+                BooruProviderSelector {}
+
+                ControlToggle { // NSFW toggle
+                    iconName: "explicit"
+                    enabled: Booru.currentProvider !== "zerochan"
+                    toggled: Persistent.states.booru.allowNsfw && Booru.currentProvider !== "zerochan"
+                    tooltip: Translation.tr("Allow NSFW")
+                    // Write the state, not `toggled`, so its binding survives.
+                    onClicked: Persistent.states.booru.allowNsfw = !toggled
                 }
 
-                StyledText {
-                    font.pixelSize: Appearance.font.pixelSize.large
-                    color: Appearance.colors.colOnLayer1
-                    text: "•"
-                }
-
-                MouseArea { // NSFW toggle
-                    visible: width > 0
-                    implicitWidth: switchesRow.implicitWidth
-                    Layout.fillHeight: true
-
-                    hoverEnabled: true
-                    PointingHandInteraction {}
-                    onPressed: {
-                        nsfwSwitch.checked = !nsfwSwitch.checked
-                    }
-
-                    RowLayout {
-                        id: switchesRow
-                        spacing: 5
-                        anchors.centerIn: parent
-
-                        StyledText {
-                            Layout.fillHeight: true
-                            Layout.leftMargin: 10
-                            Layout.alignment: Qt.AlignVCenter
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: nsfwSwitch.enabled ? Appearance.colors.colOnLayer1 : Appearance.m3colors.m3outline
-                            text: Translation.tr("Allow NSFW")
-                        }
-                        StyledSwitch {
-                            id: nsfwSwitch
-                            enabled: Booru.currentProvider !== "zerochan"
-                            scale: 0.6
-                            Layout.alignment: Qt.AlignVCenter
-                            checked: (Persistent.states.booru.allowNsfw && Booru.currentProvider !== "zerochan")
-                            onCheckedChanged: {
-                                if (!nsfwSwitch.enabled) return;
-                                Persistent.states.booru.allowNsfw = checked;
-                            }
-                        }
-                    }
-
-                }
-
-                MouseArea { // e621 blacklist toggle
+                ControlToggle { // e621 blacklist toggle
                     visible: Booru.currentProvider === "e621"
-                    implicitWidth: blacklistSwitchesRow.implicitWidth
-                    Layout.fillHeight: true
-                    hoverEnabled: true
-                    PointingHandInteraction {}
-                    // Write the option, not the switch, so the switch's binding survives.
-                    onPressed: {
-                        Config.options.sidebar.booru.e621.applyBlacklist = !blacklistSwitch.checked
-                    }
-
-                    RowLayout {
-                        id: blacklistSwitchesRow
-                        spacing: 5
-                        anchors.centerIn: parent
-
-                        StyledText {
-                            Layout.fillHeight: true
-                            Layout.leftMargin: 10
-                            Layout.alignment: Qt.AlignVCenter
-                            font.pixelSize: Appearance.font.pixelSize.smaller
-                            color: Appearance.colors.colOnLayer1
-                            text: Translation.tr("Blacklist")
-                        }
-                        StyledSwitch {
-                            id: blacklistSwitch
-                            scale: 0.6
-                            Layout.alignment: Qt.AlignVCenter
-                            checked: Config.options?.sidebar?.booru?.e621?.applyBlacklist ?? true
-                            onToggled: {
-                                Config.options.sidebar.booru.e621.applyBlacklist = checked;
-                            }
-                        }
-                    }
+                    iconName: "block"
+                    toggled: Config.options?.sidebar?.booru?.e621?.applyBlacklist ?? true
+                    tooltip: Translation.tr("Apply e621 blacklist")
+                    onClicked: Config.options.sidebar.booru.e621.applyBlacklist = !toggled
                 }
 
                 Item { Layout.fillWidth: true }
