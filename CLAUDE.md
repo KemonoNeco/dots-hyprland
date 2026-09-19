@@ -174,3 +174,19 @@ To run a python script from QML/shell, either use the venv-activating shebang tr
 - `modules/common/widgets/shapes` is a submodule; fresh clones without `--recurse-submodules` will have broken shape imports.
 - The shell runs under plain Hyprland, not `uwsm`-managed Hyprland (per `CONTRIBUTING.md`).
 - `cache/` and `diagnose.result` at repo root are gitignored build/runtime artifacts.
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in GitHub Issues on the fork `KemonoNeco/dots-hyprland`. Never file fork-personal issues on upstream `end-4/dots-hyprland`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five default triage labels, unchanged: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` and one `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+`docs/agents/`, `CONTEXT.md`, and `docs/adr/` are fork-only files. They are tracked on `KemonoNecoTweaks` like `CLAUDE.md` and must never land on `main`.
